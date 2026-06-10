@@ -361,7 +361,7 @@ package
 				var blur:BlurFilter = new BlurFilter();
 				blur.blurX = v1; 
 				blur.blurY = v1; 
-				blur.quality = BitmapFilterQuality.LOW;
+				blur.quality = BitmapFilterQuality.HIGH;
 				
 				b.draw(s);
 				b.applyFilter(s,new Rectangle(0,0,s.width,s.height),new Point(0,0), blur);
@@ -377,7 +377,7 @@ package
 				var blur:BlurFilter = new BlurFilter();
 				blur.blurX = v1; 
 				blur.blurY = v1; 
-				blur.quality = BitmapFilterQuality.LOW;
+				blur.quality = BitmapFilterQuality.HIGH;
 				
 				s.applyFilter(s,new Rectangle(0,0,s.width,s.height),new Point(0,0), blur);
 			} catch (e:Error) {
