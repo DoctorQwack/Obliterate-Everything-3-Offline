@@ -118,6 +118,7 @@ if ([System.IO.File]::Exists($ruffleExe)) {
         # Read Ruffle graphics backend configuration (defaults to dx12 to prevent Vulkan driver crashes)
         $backend = $env:RUFFLE_BACKEND
         if (-not $backend) { $backend = "dx12" }
+        $env:WGPU_BACKEND = $backend
         
         Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using graphics backend '$backend'..." "Gray"
         Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf", "-g", $backend

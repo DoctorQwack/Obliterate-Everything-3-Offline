@@ -1,4 +1,4 @@
-﻿package 
+package 
 {
 	import flash.display.*;
     //import flash.sampler.*;
@@ -30,15 +30,19 @@
 		
 		public static function Bloom(s:BitmapData, v1:int, v2:Number)
 		{
-			var b:BitmapData = new BitmapData(s.width,s.height,true,0x00000000);
-			var blur:BlurFilter = new BlurFilter();
-            blur.blurX = v1; 
-            blur.blurY = v1; 
-            blur.quality = BitmapFilterQuality.HIGH;
-			
-			b.draw(s);
-			b.applyFilter(s,new Rectangle(0,0,s.width,s.height),new Point(0,0), blur);
-			s.draw(b,null,(new Rectangle(0, 0, b.width, b.height), new ColorTransform(1,1,1,v2) ),"screen",null,false);
+			try {
+				var b:BitmapData = new BitmapData(s.width,s.height,true,0x00000000);
+				var blur:BlurFilter = new BlurFilter();
+				blur.blurX = v1; 
+				blur.blurY = v1; 
+				blur.quality = BitmapFilterQuality.LOW;
+				
+				b.draw(s);
+				b.applyFilter(s,new Rectangle(0,0,s.width,s.height),new Point(0,0), blur);
+				s.draw(b,null,(new Rectangle(0, 0, b.width, b.height), new ColorTransform(1,1,1,v2) ),"screen",null,false);
+			} catch (e:Error) {
+				trace("PostProcess.Bloom error: " + e.message);
+			}
 		}
 		
 		public static function Glow(s:BitmapData, v1:int, v2:Number, v3:Boolean, r:int, g:int, b:int)

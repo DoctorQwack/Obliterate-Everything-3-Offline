@@ -1,4 +1,4 @@
-﻿package 
+package 
 {
 	import flash.display.*;
     //import flash.sampler.*;
@@ -237,13 +237,30 @@
 			r = Math.floor(blue / (Math.random() + 1));
 			g = Math.floor(blue / (Math.random() * .5 + 1));
 			b = Math.floor(blue);
-			starbuffer.setPixel(8,8,b+256*g+256*256*r + 256*256*255);
-			//starbuffer.setPixel(1,1,0xFFFFFFFF);
-			Bloom(starbuffer,2,1);
-			Bloom(starbuffer,3,1);
-			Bloom(starbuffer,5,1);
-			Bloom(starbuffer,7,1);
-			Bloom(starbuffer,10,1);
+			
+			// Mathematically generate radial glow/bloom to bypass expensive applyFilter calls and Vulkan driver crashes.
+			for (var xx:int = 0; xx < 16; xx++) {
+				for (var yy:int = 0; yy < 16; yy++) {
+					var dx:Number = xx - 8;
+					var dy:Number = yy - 8;
+					var d2:Number = dx * dx + dy * dy;
+					var intensity:Number = 0.5 * Math.exp(-d2 / 3.0) + 0.5 * Math.exp(-d2 / 12.0);
+					if (intensity > 0.005) {
+						var pixR:int = Math.min(255, Math.floor(r * intensity));
+						var pixG:int = Math.min(255, Math.floor(g * intensity));
+						var pixB:int = Math.min(255, Math.floor(b * intensity));
+						
+						// Replicate the white core in the center
+						if (xx == 8 && yy == 8) {
+							pixR = Math.min(255, pixR + 150);
+							pixG = Math.min(255, pixG + 150);
+							pixB = Math.min(255, pixB + 150);
+						}
+						
+						starbuffer.setPixel(xx, yy, (pixR << 16) | (pixG << 8) | pixB);
+					}
+				}
+			}
 			
 			return(starbuffer);
 		}
@@ -292,12 +309,9 @@
 					}
 				}
 			}
-			Bloom(starbuffer,2,1);
 			Bloom(starbuffer,3,1);
-			Bloom(starbuffer,5,1);
-			Bloom(starbuffer,7,1);
-			Bloom(starbuffer,10,1);			
-
+			Bloom(starbuffer,8,1);			
+ 
 			return(starbuffer);
 		}
 		
@@ -342,28 +356,33 @@
 		
 		public static function Bloom(s:BitmapData, v1:int, v2:Number)
 		{
-			var b:BitmapData = new BitmapData(s.width,s.height,true,0x00000000);
-			var blur:BlurFilter = new BlurFilter();
-            blur.blurX = v1; 
-            blur.blurY = v1; 
-            blur.quality = BitmapFilterQuality.HIGH;
-			
-			b.draw(s);
-			b.applyFilter(s,new Rectangle(0,0,s.width,s.height),new Point(0,0), blur);
-			s.draw(b,null,(new Rectangle(0, 0, b.width, b.height), new ColorTransform(1,1,1,v2) ),"screen",null,false);
+			try {
+				var b:BitmapData = new BitmapData(s.width,s.height,true,0x00000000);
+				var blur:BlurFilter = new BlurFilter();
+				blur.blurX = v1; 
+				blur.blurY = v1; 
+				blur.quality = BitmapFilterQuality.LOW;
+				
+				b.draw(s);
+				b.applyFilter(s,new Rectangle(0,0,s.width,s.height),new Point(0,0), blur);
+				s.draw(b,null,(new Rectangle(0, 0, b.width, b.height), new ColorTransform(1,1,1,v2) ),"screen",null,false);
+			} catch (e:Error) {
+				trace("Nebulas.Bloom error: " + e.message);
+			}
 		}
 		
 		public static function Blur(s:BitmapData, v1:int, v2:Number)
 		{
-			//var b:BitmapData = new BitmapData(s.width,s.height,true,0x00000000);
-			var blur:BlurFilter = new BlurFilter();
-            blur.blurX = v1; 
-            blur.blurY = v1; 
-            blur.quality = BitmapFilterQuality.HIGH;
-			
-			//b.draw(s);
-			s.applyFilter(s,new Rectangle(0,0,s.width,s.height),new Point(0,0), blur);
-			//s.draw(b,null,(new Rectangle(0, 0, b.width, b.height), new ColorTransform(1,1,1,v2) ),"normal",null,false);
+			try {
+				var blur:BlurFilter = new BlurFilter();
+				blur.blurX = v1; 
+				blur.blurY = v1; 
+				blur.quality = BitmapFilterQuality.LOW;
+				
+				s.applyFilter(s,new Rectangle(0,0,s.width,s.height),new Point(0,0), blur);
+			} catch (e:Error) {
+				trace("Nebulas.Blur error: " + e.message);
+			}
 		}
 		
 		public static function Rand(s:Number): Number

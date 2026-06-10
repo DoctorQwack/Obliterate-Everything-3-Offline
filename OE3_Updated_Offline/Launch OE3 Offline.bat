@@ -4,6 +4,7 @@ title OE3 Offline Server
 cd /d "%~dp0"
 :: Graphics backend for Ruffle Desktop. Options: vulkan, dx12, dx11, gl, default
 set "RUFFLE_BACKEND=dx12"
+set "WGPU_BACKEND=dx12"
 echo Starting OE3 Offline Server...
 echo Keep this window open while playing.
 echo.
@@ -133,6 +134,7 @@ if ([System.IO.File]::Exists($ruffleExe)) {
         # Read Ruffle graphics backend configuration (defaults to dx12 to prevent Vulkan driver crashes)
         $backend = $env:RUFFLE_BACKEND
         if (-not $backend) { $backend = "dx12" }
+        $env:WGPU_BACKEND = $backend
         
         Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using graphics backend '$backend'..." "Gray"
         Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf", "-g", $backend
