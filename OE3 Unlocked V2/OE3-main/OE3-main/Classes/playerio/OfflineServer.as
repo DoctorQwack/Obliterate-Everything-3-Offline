@@ -23,6 +23,15 @@ package playerio {
 		private var _vaultMinute:int = 0;
 		private var _lastVaultCheck:Number = 0;
 
+		private var _rngSeed:uint = 0;
+		private function seedRNG(seed:uint):void {
+			_rngSeed = seed;
+		}
+		private function MathRandom():Number {
+			_rngSeed = (1103515245 * _rngSeed + 12345) & 0x7FFFFFFF;
+			return _rngSeed / 2147483647.0;
+		}
+
 		public static const MAX_STATIONS:int = 7;
 
 		public static function getInstance():OfflineServer {
@@ -289,7 +298,7 @@ package playerio {
 			} else if (connection.roomType == "Matcher") {
 				// In matchmaking, instantly return a match room
 				var msg:LocalMessage = new LocalMessage("mgo");
-				msg.add("localGameRoom_" + Math.floor(Math.random() * 1000));
+				msg.add("localGameRoom_" + Math.floor(MathRandom() * 1000));
 				connection.receiveFromServer(msg);
 			} else if (connection.roomType == "Game") {
 				// Instantly start multiplayer room simulator
@@ -335,6 +344,9 @@ package playerio {
 		}
 
 		public function handleIncomingMessage(connection:LocalConnection, message:Message):void {
+			// Seed with a dynamic value (milliseconds) by default to keep gameplay rewards and matchmaking dynamic
+			seedRNG(uint(new Date().time & 0x7FFFFFFF));
+
 			var type:String = message.type;
 			var i:int, j:int;
 
@@ -595,7 +607,7 @@ package playerio {
 							if (upItem && upItem[0] >= 100) {
 								_player.credits -= 250;
 								
-								var seed:int = Math.floor(Math.random() * 900000000);
+								var seed:int = Math.floor(MathRandom() * 900000000);
 								var upBase:int = upItem[0];
 								
 								upItem[1] = -1;
@@ -603,11 +615,11 @@ package playerio {
 								upItem[3] = -1;
 								
 								// Generate randomized upgrades
-								upItem[1] = generateUpgrade(upBase, Math.random() * 90000000);
-								if (Math.random() * 100 > 40) {
-									upItem[2] = generateUpgrade(upBase, Math.random() * 90000000);
-									if (Math.random() * 100 > 70) {
-										upItem[3] = generateUpgrade(upBase, Math.random() * 90000000);
+								upItem[1] = generateUpgrade(upBase, MathRandom() * 90000000);
+								if (MathRandom() * 100 > 40) {
+									upItem[2] = generateUpgrade(upBase, MathRandom() * 90000000);
+									if (MathRandom() * 100 > 70) {
+										upItem[3] = generateUpgrade(upBase, MathRandom() * 90000000);
 									}
 								}
 								fixItem(upItem);
@@ -640,7 +652,7 @@ package playerio {
 					case "glogin":
 						// Re-send status and start triggers for multiplayer sync
 						var ggo:LocalMessage = new LocalMessage("ggo");
-						ggo.add(Math.floor(Math.random() * 5)); // Random level index
+						ggo.add(Math.floor(MathRandom() * 5)); // Random level index
 						connection.receiveFromServer(ggo);
 						break;
 
@@ -880,21 +892,25 @@ package playerio {
 		}
 
 		private function refreshVault():void {
+			// Seed with UTC hours since epoch for globally synchronized hourly shop items
+			var hoursSinceEpoch:uint = uint(Math.floor(new Date().time / (1000 * 60 * 60))) & 0x7FFFFFFF;
+			seedRNG(hoursSinceEpoch);
+
 			// Populate shop vault with 11 random items
 			for (var i:int = 0; i < 11; i++) {
-				var itemId:int = generateRandomItem(0, Math.random() * 90000000);
+				var itemId:int = generateRandomItem(0, MathRandom() * 90000000);
 				_vault[i][0] = itemId;
 				_vault[i][1] = -1;
 				_vault[i][2] = -1;
 				_vault[i][3] = -1;
 				
 				// 70% chance of getting randomized upgrades
-				if (Math.random() * 10 > 2) {
-					_vault[i][1] = generateUpgrade(itemId, Math.random() * 90000000);
-					if (Math.random() * 10 > 2) {
-						_vault[i][2] = generateUpgrade(itemId, Math.random() * 90000000);
-						if (Math.random() * 10 > 6) {
-							_vault[i][3] = generateUpgrade(itemId, Math.random() * 90000000);
+				if (MathRandom() * 10 > 2) {
+					_vault[i][1] = generateUpgrade(itemId, MathRandom() * 90000000);
+					if (MathRandom() * 10 > 2) {
+						_vault[i][2] = generateUpgrade(itemId, MathRandom() * 90000000);
+						if (MathRandom() * 10 > 6) {
+							_vault[i][3] = generateUpgrade(itemId, MathRandom() * 90000000);
 						}
 					}
 				}
@@ -946,17 +962,17 @@ package playerio {
 
 			if (zone == 0 || zone == 2 || zone == 3) { // Advanced Zones
 				for (i = 350; i < 361; i++) {
-					if (Math.random() > 0.5) itemsList.push(i);
+					if (MathRandom() > 0.5) itemsList.push(i);
 				}
 				for (i = 361; i < 369; i++) {
-					if (Math.random() > 0.9) itemsList.push(i);
+					if (MathRandom() > 0.9) itemsList.push(i);
 				}
 				for (i = 369; i < 380; i++) {
-					if (Math.random() > 0.5) itemsList.push(i);
+					if (MathRandom() > 0.5) itemsList.push(i);
 				}
 			}
 			
-			var randIdx:int = Math.floor(Math.random() * itemsList.length);
+			var randIdx:int = Math.floor(MathRandom() * itemsList.length);
 			return itemsList[randIdx];
 		}
 
@@ -1015,7 +1031,7 @@ package playerio {
 					return -1;
 			}
 			
-			var randIdx:int = Math.floor(Math.random() * upgrades.length);
+			var randIdx:int = Math.floor(MathRandom() * upgrades.length);
 			return upgrades[randIdx];
 		}
 
@@ -1201,26 +1217,26 @@ package playerio {
 				var reward:Array = p.prizes[i];
 				
 				// 70% chance of random weapon/ship, otherwise currency reward
-				if (Math.random() * 100 <= 70) {
-					reward[0] = generateRandomItem(itemclass, Math.random() * 900000);
+				if (MathRandom() * 100 <= 70) {
+					reward[0] = generateRandomItem(itemclass, MathRandom() * 900000);
 					reward[1] = -1;
 					reward[2] = -1;
 					reward[3] = -1;
 					
 					// Upgrade chance based on odds
-					if (dangerclass > 0 && Math.random() * 100 > rareodds) {
-						reward[1] = generateUpgrade(reward[0], Math.random() * 900000);
-						if (dangerclass > 1 && Math.random() * 100 > 70) {
-							reward[2] = generateUpgrade(reward[0], Math.random() * 900000);
-							if (dangerclass > 2 && Math.random() * 100 > 70) {
-								reward[3] = generateUpgrade(reward[0], Math.random() * 900000);
+					if (dangerclass > 0 && MathRandom() * 100 > rareodds) {
+						reward[1] = generateUpgrade(reward[0], MathRandom() * 900000);
+						if (dangerclass > 1 && MathRandom() * 100 > 70) {
+							reward[2] = generateUpgrade(reward[0], MathRandom() * 900000);
+							if (dangerclass > 2 && MathRandom() * 100 > 70) {
+								reward[3] = generateUpgrade(reward[0], MathRandom() * 900000);
 							}
 						}
 					}
 					fixItem(reward);
 				} else {
 					// Currency reward (1000 + base reward depending on dangerclass)
-					reward[0] = 1000 + 75 + (25 * dangerclass) + Math.floor(Math.random() * 100);
+					reward[0] = 1000 + 75 + (25 * dangerclass) + Math.floor(MathRandom() * 100);
 					reward[1] = -1;
 					reward[2] = -1;
 					reward[3] = -1;

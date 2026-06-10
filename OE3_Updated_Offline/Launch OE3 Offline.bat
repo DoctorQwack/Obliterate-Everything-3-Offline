@@ -2,6 +2,8 @@
 @echo off
 title OE3 Offline Server
 cd /d "%~dp0"
+:: Graphics backend for Ruffle Desktop. Options: vulkan, dx12, dx11, gl, default
+set "RUFFLE_BACKEND=dx12"
 echo Starting OE3 Offline Server...
 echo Keep this window open while playing.
 echo.
@@ -127,8 +129,13 @@ $ruffleExe = [System.IO.Path]::Combine($dir, "ruffle.exe")
 if ([System.IO.File]::Exists($ruffleExe)) {
     try {
         Log-Message "Found native Ruffle Desktop player (ruffle.exe)." "Green"
-        Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf..." "Gray"
-        Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf"
+        
+        # Read Ruffle graphics backend configuration (defaults to dx12 to prevent Vulkan driver crashes)
+        $backend = $env:RUFFLE_BACKEND
+        if (-not $backend) { $backend = "dx12" }
+        
+        Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using graphics backend '$backend'..." "Gray"
+        Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf", "-g", $backend
         Log-Message "Ruffle Desktop launched successfully." "Green"
     } catch {
         Log-Message "Failed to start Ruffle Desktop. Falling back to web browser..." "Yellow"
