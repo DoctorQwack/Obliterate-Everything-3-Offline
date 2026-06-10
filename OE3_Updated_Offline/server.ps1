@@ -49,9 +49,24 @@ try {
 } catch {
     Log-Message "Error checking OE3_UPDATED.swf: $_" "Red"
 }
-
-
-
+# 1.5 Auto-migrate existing saves from root folder to saves/ folder
+try {
+    $savesDir = Join-Path $dir "saves"
+    if (-not (Test-Path $savesDir)) {
+        [System.IO.Directory]::CreateDirectory($savesDir) | Out-Null
+    }
+    Get-ChildItem -Path $dir -Filter "save_*.json" -File | ForEach-Object {
+        $dest = Join-Path $savesDir $_.Name
+        if (-not (Test-Path $dest)) {
+            Log-Message "Migrating save file: $($_.Name) -> saves/" "Cyan"
+            Move-Item -Path $_.FullName -Destination $dest -Force
+        } else {
+            Remove-Item -Path $_.FullName -Force
+        }
+    }
+} catch {
+    Log-Message "Error migrating saves: $_" "Yellow"
+}
 # 2. Port Conflict Auto-Recovery & HTTP Listener Initialization
 $listenerStarted = $false
 $maxTries = 20
