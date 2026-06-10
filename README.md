@@ -8,7 +8,7 @@ Current features:
 -all currancy is now free
 
 To play
--download the zip from [releases]()
+-download the zip from [releases](https://github.com/DoctorQwack/Obliterate-Everything-3-Offline/releases/tag/Beta)
 -extract zip
 -launch the file named "Launch OE3 Offline.bat
 -wait for the local server to spin up
