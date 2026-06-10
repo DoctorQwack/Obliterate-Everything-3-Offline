@@ -109,13 +109,30 @@ if (-not $listenerStarted) {
     exit
 }
 
-# 4. Open the browser automatically to IPv4 loopback
-try {
-    Log-Message "Opening default web browser to http://127.0.0.1:$port/..." "Gray"
-    Start-Process "http://127.0.0.1:$port/"
-    Log-Message "Browser launched successfully." "Green"
-} catch {
-    Log-Message "Could not open browser automatically. Please open http://127.0.0.1:$port/ manually." "Yellow"
+# 4. Open the game (Native Ruffle Desktop if available, otherwise Web Browser)
+$ruffleExe = [System.IO.Path]::Combine($dir, "ruffle.exe")
+if ([System.IO.File]::Exists($ruffleExe)) {
+    try {
+        Log-Message "Found native Ruffle Desktop player (ruffle.exe)." "Green"
+        Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf..." "Gray"
+        Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf"
+        Log-Message "Ruffle Desktop launched successfully." "Green"
+    } catch {
+        Log-Message "Failed to start Ruffle Desktop. Falling back to web browser..." "Yellow"
+        try {
+            Start-Process "http://127.0.0.1:$port/"
+        } catch {
+            Log-Message "Could not open browser. Please open http://127.0.0.1:$port/ manually." "Yellow"
+        }
+    }
+} else {
+    try {
+        Log-Message "Opening default web browser to http://127.0.0.1:$port/..." "Gray"
+        Start-Process "http://127.0.0.1:$port/"
+        Log-Message "Browser launched successfully." "Green"
+    } catch {
+        Log-Message "Could not open browser automatically. Please open http://127.0.0.1:$port/ manually." "Yellow"
+    }
 }
 
 Log-Message "Server is running. Keep this window open while playing!" "Gray"
