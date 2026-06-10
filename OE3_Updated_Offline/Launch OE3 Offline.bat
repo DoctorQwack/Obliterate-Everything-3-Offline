@@ -42,8 +42,12 @@ Log-Message "=========================================" "Green"
 Log-Message "Verifying folder contents..." "Gray"
 $indexExists = Test-Path (Join-Path $dir "index.html")
 $swfExists = Test-Path (Join-Path $dir "OE3_UPDATED.swf")
-Log-Message "index.html check: $($indexExists ? 'FOUND' : 'MISSING')" ($indexExists ? "Green" : "Red")
-Log-Message "OE3_UPDATED.swf check: $($swfExists ? 'FOUND' : 'MISSING')" ($swfExists ? "Green" : "Red")
+if ($indexExists) { $indexStatus = "FOUND"; $indexColor = "Green" } else { $indexStatus = "MISSING"; $indexColor = "Red" }
+Log-Message "index.html check: $indexStatus" $indexColor
+
+if ($swfExists) { $swfStatus = "FOUND"; $swfColor = "Green" } else { $swfStatus = "MISSING"; $swfColor = "Red" }
+Log-Message "OE3_UPDATED.swf check: $swfStatus" $swfColor
+
 
 # 2. Port Conflict Auto-Recovery Logic
 Log-Message "Checking port conflict for port $port..." "Gray"
