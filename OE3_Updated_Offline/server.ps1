@@ -170,6 +170,7 @@ while ($l.IsListening) {
                 '.jpg'  { 'image/jpeg' }
                 '.gif'  { 'image/gif' }
                 '.ico'  { 'image/x-icon' }
+                '.txt'  { 'text/plain; charset=utf-8' }
                 default { 'application/octet-stream' }
             }
             

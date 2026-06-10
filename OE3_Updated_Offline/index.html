@@ -2,12 +2,16 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>OE3 Offline</title>
+  <title>OE3 Offline Edition</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      background: #000;
+      background: radial-gradient(circle at center, #151522 0%, #07070a 100%);
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
       height: 100vh;
@@ -15,45 +19,207 @@
       overflow: hidden;
       font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
     }
+    
+    #app-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
     #player-container {
       width: 800px;
       height: 600px;
       display: flex;
       justify-content: center;
       align-items: center;
-      background: #0d0d0d;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-      border-radius: 4px;
+      background: #09090e;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 40px rgba(0, 173, 181, 0.05);
+      border-radius: 12px;
       overflow: hidden;
-      border: 1px solid #222;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
     }
+    
     #player-container ruffle-player {
       width: 100%;
       height: 100%;
     }
+    
+    .control-panel {
+      width: 800px;
+      background: rgba(18, 18, 26, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #e0e0e6;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      transition: all 0.3s ease;
+    }
+    
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #ffffff 30%, #a5a5b5 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .badge {
+      background: linear-gradient(135deg, #00adb5 0%, #0077b6 100%);
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      box-shadow: 0 2px 10px rgba(0, 173, 181, 0.3);
+    }
+    
+    .settings-area {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    
+    .setting-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .setting-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #8e8e9f;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .setting-select {
+      background: #1c1c24;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 8px;
+      outline: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    
+    .setting-select:hover {
+      border-color: rgba(0, 173, 181, 0.5);
+      background: #22222d;
+    }
+
+    .setting-select:focus {
+      border-color: #00adb5;
+      box-shadow: 0 0 0 2px rgba(0, 173, 181, 0.2);
+    }
+    
+    .btn-diag {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #a5a5b5;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+    }
+    
+    .btn-diag:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+    
     #status {
-      color: #888;
-      font-size: 14px;
-      position: absolute;
-      bottom: 20px;
-      background: rgba(0,0,0,0.5);
-      padding: 5px 12px;
-      border-radius: 20px;
-      pointer-events: none;
+      color: #6c6c7d;
+      font-size: 12px;
+      font-weight: 500;
+      margin-top: 4px;
+      letter-spacing: 0.5px;
       transition: opacity 0.5s ease;
     }
   </style>
 </head>
 <body>
-  <div id="player-container"></div>
-  <div id="status">Initializing Ruffle...</div>
+  <div id="app-container">
+    <div id="player-container"></div>
+    
+    <div class="control-panel">
+      <div class="logo-area">
+        <span class="logo">Obliterate Everything 3</span>
+        <span class="badge">Offline</span>
+      </div>
+      <div class="settings-area">
+        <div class="setting-group">
+          <label for="quality-select">Graphics</label>
+          <select id="quality-select" class="setting-select">
+            <option value="high">High Quality (Laggy)</option>
+            <option value="medium">Medium (Recommended)</option>
+            <option value="low">Low Quality (Max FPS)</option>
+          </select>
+        </div>
+        <a href="/log.txt" target="_blank" class="btn-diag">View Logs</a>
+      </div>
+    </div>
+    
+    <div id="status">Initializing Ruffle...</div>
+  </div>
 
   <script src="ruffle/ruffle.js"></script>
   <script>
     console.log("OE3 Offline Page Loaded");
     const statusEl = document.getElementById("status");
+    const qualitySelect = document.getElementById("quality-select");
     
+    // Read cached quality or default to medium to resolve lag/audio pops
+    const savedQuality = localStorage.getItem("oe3_quality") || "medium";
+    qualitySelect.value = savedQuality;
+    
+    // Configure Ruffle Player settings globally
     window.RufflePlayer = window.RufflePlayer || {};
+    window.RufflePlayer.config = {
+      quality: savedQuality,
+      autoplay: "on",
+      scale: "showAll",
+      allowScriptAccess: true,
+      unmuteOverlay: "hidden"
+    };
+    
+    // Listen for quality changes, save to cache and reload
+    qualitySelect.addEventListener("change", function() {
+      localStorage.setItem("oe3_quality", qualitySelect.value);
+      statusEl.textContent = "Applying graphics settings...";
+      statusEl.style.opacity = 1;
+      setTimeout(() => {
+        window.location.reload();
+      }, 300);
+    });
+
     window.addEventListener("load", function() {
       console.log("Window load event. Setting up Ruffle...");
       statusEl.textContent = "Loading Ruffle Engine...";
@@ -73,15 +239,11 @@
       const container = document.getElementById("player-container");
       container.appendChild(player);
       
-      console.log("Loading SWF: OE3_UPDATED.swf");
-      statusEl.textContent = "Loading Game SWF...";
+      console.log("Loading SWF: OE3_UPDATED.swf with quality settings: " + savedQuality);
+      statusEl.textContent = "Loading Game SWF (" + savedQuality.toUpperCase() + " quality)...";
       
       player.load({
         url: "OE3_UPDATED.swf",
-        allowScriptAccess: true,
-        autoplay: "on",
-        scale: "showAll",
-        unmuteOverlay: "hidden"
       }).then(() => {
         console.log("OE3 SWF successfully loaded into Ruffle.");
         statusEl.textContent = "Game Loaded!";
