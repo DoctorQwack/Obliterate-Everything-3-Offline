@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obliterate Everything 3 - Offline Edition</title>
+    <!-- Modern Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --container-bg: #1f2833;
+            --primary-color: #66fcf1;
+            --secondary-color: #45f3ff;
+            --text-color: #c5c6c7;
+            --accent-glow: rgba(102, 252, 241, 0.2);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        header {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: 2px;
+            background: linear-gradient(45deg, #ffffff, var(--primary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .subtitle {
+            font-size: 0.95rem;
+            color: #8f94fb;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-top: 5px;
+        }
+
+        /* Game Frame and Glowing Container */
+        .game-wrapper {
+            position: relative;
+            background-color: #000000;
+            width: 800px;
+            height: 600px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5),
+                        0 0 0 1px rgba(255, 255, 255, 0.1),
+                        0 0 20px 0 var(--accent-glow);
+            overflow: hidden;
+            margin-bottom: 30px;
+            transition: box-shadow 0.3s ease;
+        }
+
+        .game-wrapper:hover {
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.7),
+                        0 0 0 1px var(--primary-color),
+                        0 0 30px 0 var(--accent-glow);
+        }
+
+        #ruffle-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Information & Controls Section */
+        .info-container {
+            width: 800px;
+            max-width: 90%;
+            background: rgba(31, 40, 51, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 50px;
+            box-sizing: border-box;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+
+        @media (max-width: 850px) {
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+            .game-wrapper {
+                width: 100%;
+                height: 0;
+                padding-bottom: 75%; /* 4:3 Aspect Ratio */
+            }
+            .info-container {
+                width: 100%;
+            }
+        }
+
+        h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.3rem;
+            color: #ffffff;
+            border-left: 3px solid var(--primary-color);
+            padding-left: 10px;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+        p {
+            line-height: 1.6;
+            font-size: 0.95rem;
+            margin: 0 0 10px 0;
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 8px;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+
+        .shortcut-key {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: 'Space Grotesk', monospace;
+            font-size: 0.85rem;
+            color: var(--primary-color);
+        }
+
+        footer {
+            margin-top: auto;
+            padding: 20px 0;
+            font-size: 0.8rem;
+            color: #4f5b66;
+            text-align: center;
+        }
+
+        a {
+            color: var(--primary-color);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        a:hover {
+            color: #ffffff;
+            text-shadow: 0 0 5px var(--accent-glow);
+        }
+    </style>
+    <!-- Load Ruffle from the Official CDN -->
+    <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
+</head>
+<body>
+
+    <header>
+        <h1>OBLITERATE EVERYTHING 3</h1>
+        <div class="subtitle">Offline Edition</div>
+    </header>
+
+    <div class="game-wrapper">
+        <div id="ruffle-container"></div>
+    </div>
+
+    <div class="info-container">
+        <div class="info-grid">
+            <div>
+                <h2>Offline Gameplay Guide</h2>
+                <p>Welcome to the customized offline build of OE3! All network requirements have been replaced with a simulated client-side server.</p>
+                <ul>
+                    <li><strong>Profiles:</strong> Create profiles or login with any username on the account screen. They will save locally.</li>
+                    <li><strong>Persistence:</strong> Your credits, inventory, armory, and campaign maps are saved directly in your browser's Local Storage. Clearing your browser data will wipe your saves.</li>
+                    <li><strong>Offline Features:</strong> Play the Single Player campaign, unlock advanced tech in the Store, upgrade weapons, and customize your ship loadouts in the Hangar.</li>
+                </ul>
+            </div>
+            <div>
+                <h2>Key Bindings</h2>
+                <ul>
+                    <li><span class="shortcut-key">1</span> - <span class="shortcut-key">7</span> : Build units in slots 1 to 7</li>
+                    <li><span class="shortcut-key">Q</span>, <span class="shortcut-key">W</span>, <span class="shortcut-key">E</span> : Advanced build options</li>
+                    <li><span class="shortcut-key">A</span>, <span class="shortcut-key">S</span> : Secondary utilities</li>
+                    <li><span class="shortcut-key">Z</span>, <span class="shortcut-key">X</span> : Structural abilities</li>
+                    <li><span class="shortcut-key">Space</span> : Pause / Resume match</li>
+                    <li><span class="shortcut-key">Click & Drag</span> : Pan the camera around the map grid</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        Obliterate Everything 3 &copy; cwwallis. Modernized for offline play via <a href="https://ruffle.rs/" target="_blank">Ruffle WebAssembly</a>.
+    </footer>
+
+    <script>
+        window.addEventListener("DOMContentLoaded", () => {
+            const ruffle = window.RufflePlayer.newest();
+            const player = ruffle.createPlayer();
+            const container = document.getElementById("ruffle-container");
+            container.appendChild(player);
+
+            // Configure Ruffle Player settings
+            player.load({
+                url: "OE3.swf",
+                backgroundColor: "#000000",
+                wmode: "gpu",
+                allowFullScreen: false,
+                scale: "showAll"
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Flash/Animate temporary files
+*.tmp
+.fla.autosave
+* - Shortcut.lnk
+Backup/
+_backup_
+
+# Player Save Data (User Specific)
+save*.json
+save.json
+
+# Zip files/Large Archives
+*.zip
+*.rar
+*.7z
+
+# Node / Electron build folders (if any)
+node_modules/
+dist/

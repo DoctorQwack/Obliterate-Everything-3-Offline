@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OE3 Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+    }
+    #player-container {
+      width: 800px;
+      height: 600px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #0d0d0d;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #222;
+    }
+    #player-container ruffle-player {
+      width: 100%;
+      height: 100%;
+    }
+    #status {
+      color: #888;
+      font-size: 14px;
+      position: absolute;
+      bottom: 20px;
+      background: rgba(0,0,0,0.5);
+      padding: 5px 12px;
+      border-radius: 20px;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+  </style>
+</head>
+<body>
+  <div id="player-container"></div>
+  <div id="status">Initializing Ruffle...</div>
+
+  <script src="ruffle/ruffle.js"></script>
+  <script>
+    console.log("OE3 Offline Page Loaded");
+    const statusEl = document.getElementById("status");
+    
+    window.RufflePlayer = window.RufflePlayer || {};
+    window.addEventListener("load", function() {
+      console.log("Window load event. Setting up Ruffle...");
+      statusEl.textContent = "Loading Ruffle Engine...";
+      
+      const ruffle = window.RufflePlayer.newest();
+      if (!ruffle) {
+        console.error("RufflePlayer.newest() returned undefined. ruffle.js may have failed to load.");
+        statusEl.textContent = "Error: Ruffle Engine not found. Check console.";
+        statusEl.style.color = "#ff5555";
+        return;
+      }
+      
+      console.log("Ruffle engine loaded successfully. Creating player...");
+      statusEl.textContent = "Creating Player Container...";
+      
+      const player = ruffle.createPlayer();
+      const container = document.getElementById("player-container");
+      container.appendChild(player);
+      
+      console.log("Loading SWF: OE3_UPDATED.swf");
+      statusEl.textContent = "Loading Game SWF...";
+      
+      player.load({
+        url: "OE3_UPDATED.swf",
+        allowScriptAccess: true,
+        autoplay: "on",
+        scale: "showAll",
+        unmuteOverlay: "hidden"
+      }).then(() => {
+        console.log("OE3 SWF successfully loaded into Ruffle.");
+        statusEl.textContent = "Game Loaded!";
+        setTimeout(() => {
+          statusEl.style.opacity = 0;
+        }, 3000);
+      }).catch((err) => {
+        console.error("Failed to load SWF:", err);
+        statusEl.textContent = "Error loading SWF. Check console.";
+        statusEl.style.color = "#ff5555";
+      });
+    });
+  </script>
+</body>
+</html>

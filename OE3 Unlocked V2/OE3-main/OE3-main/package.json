@@ -1,0 +1,35 @@
+{
+  "name": "obliterate-everything-3",
+  "version": "1.0.0",
+  "description": "Obliterate Everything 3 - Offline Edition",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "author": "cwwallis",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.cwwallis.oe3",
+    "productName": "Obliterate Everything 3",
+    "win": {
+      "target": "portable",
+      "icon": null
+    },
+    "files": [
+      "index.html",
+      "OE3.swf",
+      "main.js",
+      "package.json",
+      "Media/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}
