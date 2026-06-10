@@ -1,0 +1,8 @@
+[2026-06-09 19:51:42] Request: GET /index.html -> 200 OK (2908 bytes, text/html; charset=utf-8)
+[2026-06-09 19:51:42] Request: GET /ruffle/ruffle.js -> 200 OK (457962 bytes, application/javascript; charset=utf-8)
+[2026-06-09 19:51:42] Request: GET /ruffle/core.ruffle.a6584f4c154875f3f805.js -> 200 OK (102936 bytes, application/javascript; charset=utf-8)
+[2026-06-09 19:51:42] Request: GET /ruffle/ecc5e233d534bdc785c1.wasm -> 200 OK (12974369 bytes, application/wasm)
+[2026-06-09 19:51:43] Request: GET /OE3_UPDATED.swf -> 200 OK (12067427 bytes, application/x-shockwave-flash)
+[2026-06-09 19:51:45] Request: GET /favicon.ico -> 404 Not Found
+[2026-06-09 19:51:50] Request: GET /load?user=mitch -> 200 OK (Loaded profile)
+[2026-06-09 19:51:50] Request: POST /save?user=mitch -> 200 OK (Saved profile)

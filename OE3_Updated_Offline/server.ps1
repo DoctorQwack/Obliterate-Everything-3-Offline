@@ -13,13 +13,27 @@ function Log-Message($msg, $color = "Gray") {
     } catch {}
 }
 
-Write-Host "=========================================" -ForegroundColor Green
-Write-Host "   OE3 Offline Server Starting...        " -ForegroundColor Green
-Write-Host "   Serving from: $dir" -ForegroundColor Cyan
-Write-Host "   URL: http://localhost:$port/" -ForegroundColor Cyan
-Write-Host "=========================================" -ForegroundColor Green
+# Clear old log file at startup
+try {
+    $logFile = Join-Path $dir "log.txt"
+    if (Test-Path $logFile) { Remove-Item $logFile -Force -ErrorAction SilentlyContinue }
+} catch {}
 
-# Port Conflict Auto-Recovery Logic
+Log-Message "=========================================" "Green"
+Log-Message "   OE3 Offline Server Starting...        " "Green"
+Log-Message "   Serving from: $dir" "Cyan"
+Log-Message "   URL: http://127.0.0.1:$port/" "Cyan"
+Log-Message "=========================================" "Green"
+
+# 1. Detailed File Verification
+Log-Message "Verifying folder contents..." "Gray"
+$indexExists = Test-Path (Join-Path $dir "index.html")
+$swfExists = Test-Path (Join-Path $dir "OE3_UPDATED.swf")
+Log-Message "index.html check: $($indexExists ? 'FOUND' : 'MISSING')" ($indexExists ? "Green" : "Red")
+Log-Message "OE3_UPDATED.swf check: $($swfExists ? 'FOUND' : 'MISSING')" ($swfExists ? "Green" : "Red")
+
+# 2. Port Conflict Auto-Recovery Logic
+Log-Message "Checking port conflict for port $port..." "Gray"
 try {
     $netstat = netstat -ano | Select-String ":$port\s+" | Select-Object -First 1
     if ($netstat) {
@@ -31,35 +45,45 @@ try {
             Stop-Process -Id $pidToKill -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 1
             Log-Message "Port released successfully!" "Green"
+        } else {
+            Log-Message "Port $port is in use by current process (PID $pidToKill). Re-using socket." "Gray"
         }
+    } else {
+        Log-Message "Port $port is free. No conflict detected." "Green"
     }
 } catch {
     Log-Message "Error checking port conflicts: $_" "Yellow"
 }
 
+# 3. Initialize HTTP Listener (Bind to IPv4 loopback to avoid UAC/Admin check)
+Log-Message "Initializing HTTP Listener..." "Gray"
 $l = New-Object Net.HttpListener
-$l.Prefixes.Add("http://localhost:$port/")
+$l.Prefixes.Add("http://127.0.0.1:$port/")
 
 try {
+    Log-Message "Starting listener on http://127.0.0.1:$port/..." "Gray"
     $l.Start()
+    Log-Message "HTTP Server successfully started and listening." "Green"
 } catch {
-    Write-Host "ERROR: Could not start listener on port $port." -ForegroundColor Red
-    Write-Host "This usually means another instance is already running or the port is blocked." -ForegroundColor Yellow
-    Write-Host "Details: $_" -ForegroundColor Red
+    Log-Message "ERROR: Could not start listener on port $port." "Red"
+    Log-Message "This usually means another instance is already running or the port is blocked." "Yellow"
+    Log-Message "Details: $_" "Red"
     Read-Host "Press Enter to exit..."
     exit
 }
 
-# Open the browser automatically
+# 4. Open the browser automatically to IPv4 loopback
 try {
-    Start-Process "http://localhost:$port/"
+    Log-Message "Opening default web browser to http://127.0.0.1:$port/..." "Gray"
+    Start-Process "http://127.0.0.1:$port/"
+    Log-Message "Browser launched successfully." "Green"
 } catch {
-    Write-Host "Could not open browser automatically. Please open http://localhost:$port/ manually." -ForegroundColor Yellow
+    Log-Message "Could not open browser automatically. Please open http://127.0.0.1:$port/ manually." "Yellow"
 }
 
-Write-Host "Server is running. Keep this window open while playing!" -ForegroundColor Gray
-Write-Host "Press Ctrl+C in this window to stop the server." -ForegroundColor Gray
-Write-Host ""
+Log-Message "Server is running. Keep this window open while playing!" "Gray"
+Log-Message "Press Ctrl+C in this window to stop the server." "Gray"
+Log-Message ""
 
 while ($l.IsListening) {
     $res = $null

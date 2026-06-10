@@ -194,7 +194,7 @@ package playerio {
 
 		private function logToServer(msg:String, level:String = "INFO"):void {
 			try {
-				var url:String = "http://localhost:8765/log";
+				var url:String = "/log";
 				var request:URLRequest = new URLRequest(url);
 				request.method = URLRequestMethod.POST;
 				request.data = "[" + level + "] " + msg;
@@ -207,7 +207,7 @@ package playerio {
 		}
 
 		private function loadAndLoginUser(username:String, connection:LocalConnection):void {
-			var url:String = "http://localhost:8765/load?user=" + encodeURIComponent(username);
+			var url:String = "/load?user=" + encodeURIComponent(username);
 			var request:URLRequest = new URLRequest(url);
 			var loader:URLLoader = new URLLoader();
 			
@@ -266,7 +266,7 @@ package playerio {
 			if (!_player || !_player.username) return;
 			try {
 				var jsonStr:String = stringifyJSON(_player);
-				var url:String = "http://localhost:8765/save?user=" + encodeURIComponent(_player.username);
+				var url:String = "/save?user=" + encodeURIComponent(_player.username);
 				var request:URLRequest = new URLRequest(url);
 				request.method = URLRequestMethod.POST;
 				request.data = jsonStr;
