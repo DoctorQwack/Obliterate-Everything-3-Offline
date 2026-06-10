@@ -93,7 +93,7 @@ for ($i = 0; $i -lt $maxTries; $i++) {
             }
         }
     } catch {
-        Log-Message "Error checking port conflict for $currentPort: $_" "Yellow"
+        Log-Message "Error checking port conflict for $currentPort - $_" "Yellow"
     }
 
     if ($portInUse) {
@@ -111,7 +111,7 @@ for ($i = 0; $i -lt $maxTries; $i++) {
         Log-Message "HTTP Server successfully started and listening." "Green"
         break
     } catch {
-        Log-Message "Failed to start listener on port $currentPort: $_" "Yellow"
+        Log-Message "Failed to start listener on port $currentPort - $_" "Yellow"
         try { $l.Close() } catch {}
     }
 }
