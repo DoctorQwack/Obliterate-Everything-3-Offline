@@ -52,42 +52,59 @@ try {
 
 
 
-# 2. Port Conflict Auto-Recovery Logic
-Log-Message "Checking port conflict for port $port..." "Gray"
-try {
-    $netstat = netstat -ano | Select-String ":$port\s+" | Select-Object -First 1
-    if ($netstat) {
-        $parts = $netstat.Line.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries)
-        $pidToKill = [int]$parts[-1]
-        if ($pidToKill -ne $PID -and $pidToKill -gt 4) {
-            Log-Message "Port $port is currently blocked by process PID $pidToKill (likely an orphaned server)." "Yellow"
-            Log-Message "Attempting to release the port automatically..." "Yellow"
-            Stop-Process -Id $pidToKill -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 1
-            Log-Message "Port released successfully!" "Green"
-        } else {
-            Log-Message "Port $port is in use by current process (PID $pidToKill). Re-using socket." "Gray"
+# 2. Port Conflict Auto-Recovery & HTTP Listener Initialization
+$listenerStarted = $false
+$maxTries = 20
+
+for ($i = 0; $i -lt $maxTries; $i++) {
+    $currentPort = $port + $i
+    Log-Message "Checking port conflict for port $currentPort..." "Gray"
+    
+    $portInUse = $false
+    try {
+        $netstat = netstat -ano | Select-String ":$currentPort\s+" | Select-Object -First 1
+        if ($netstat) {
+            $parts = $netstat.Line.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries)
+            $pidToKill = [int]$parts[-1]
+            if ($pidToKill -ne $PID) {
+                if ($pidToKill -gt 4) {
+                    Log-Message "Port $currentPort is blocked by process PID $pidToKill (likely an orphaned server)." "Yellow"
+                    Log-Message "Attempting to release the port automatically..." "Yellow"
+                    Stop-Process -Id $pidToKill -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 1
+                    Log-Message "Port released successfully!" "Green"
+                } else {
+                    Log-Message "Port $currentPort is blocked by System/Reserved process (PID $pidToKill). Skipping..." "Yellow"
+                    $portInUse = $true
+                }
+            }
         }
-    } else {
-        Log-Message "Port $port is free. No conflict detected." "Green"
+    } catch {
+        Log-Message "Error checking port conflict for $currentPort: $_" "Yellow"
     }
-} catch {
-    Log-Message "Error checking port conflicts: $_" "Yellow"
+
+    if ($portInUse) {
+        continue
+    }
+
+    $l = New-Object Net.HttpListener
+    $l.Prefixes.Add("http://127.0.0.1:$currentPort/")
+    
+    try {
+        Log-Message "Starting listener on http://127.0.0.1:$currentPort/..." "Gray"
+        $l.Start()
+        $port = $currentPort
+        $listenerStarted = $true
+        Log-Message "HTTP Server successfully started and listening." "Green"
+        break
+    } catch {
+        Log-Message "Failed to start listener on port $currentPort: $_" "Yellow"
+        try { $l.Close() } catch {}
+    }
 }
 
-# 3. Initialize HTTP Listener (Bind to IPv4 loopback to avoid UAC/Admin check)
-Log-Message "Initializing HTTP Listener..." "Gray"
-$l = New-Object Net.HttpListener
-$l.Prefixes.Add("http://127.0.0.1:$port/")
-
-try {
-    Log-Message "Starting listener on http://127.0.0.1:$port/..." "Gray"
-    $l.Start()
-    Log-Message "HTTP Server successfully started and listening." "Green"
-} catch {
-    Log-Message "ERROR: Could not start listener on port $port." "Red"
-    Log-Message "This usually means another instance is already running or the port is blocked." "Yellow"
-    Log-Message "Details: $_" "Red"
+if (-not $listenerStarted) {
+    Log-Message "ERROR: Could not find any available port to start the HTTP listener (tried ports $port to $($port + $maxTries - 1))." "Red"
     Read-Host "Press Enter to exit..."
     exit
 }
