@@ -163,6 +163,28 @@
       letter-spacing: 0.5px;
       transition: opacity 0.5s ease;
     }
+    
+    #player-container:fullscreen {
+      border: none !important;
+      border-radius: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      background: #000 !important;
+    }
+    #player-container:-webkit-full-screen {
+      border: none !important;
+      border-radius: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      background: #000 !important;
+    }
+    #player-container:-ms-fullscreen {
+      border: none !important;
+      border-radius: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      background: #000 !important;
+    }
   </style>
 </head>
 <body>
@@ -184,6 +206,7 @@
           </select>
         </div>
         <a href="/log.txt" target="_blank" class="btn-diag">View Logs</a>
+        <button id="fullscreen-btn" class="btn-diag">Fullscreen</button>
       </div>
     </div>
     
@@ -219,6 +242,47 @@
         window.location.reload();
       }, 300);
     });
+
+    // Fullscreen Toggle Integration
+    const fullscreenBtn = document.getElementById("fullscreen-btn");
+    const playerContainer = document.getElementById("player-container");
+    
+    fullscreenBtn.addEventListener("click", function() {
+      if (!document.fullscreenElement && 
+          !document.webkitFullscreenElement && 
+          !document.msFullscreenElement) {
+        if (playerContainer.requestFullscreen) {
+          playerContainer.requestFullscreen();
+        } else if (playerContainer.webkitRequestFullscreen) {
+          playerContainer.webkitRequestFullscreen();
+        } else if (playerContainer.msRequestFullscreen) {
+          playerContainer.msRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+          document.msExitFullscreen();
+        }
+      }
+    });
+
+    function onFullscreenChange() {
+      const isFullscreen = document.fullscreenElement || 
+                           document.webkitFullscreenElement || 
+                           document.msFullscreenElement;
+      if (isFullscreen) {
+        fullscreenBtn.textContent = "Exit Fullscreen";
+      } else {
+        fullscreenBtn.textContent = "Fullscreen";
+      }
+    }
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+    document.addEventListener("msfullscreenchange", onFullscreenChange);
 
     window.addEventListener("load", function() {
       console.log("Window load event. Setting up Ruffle...");
