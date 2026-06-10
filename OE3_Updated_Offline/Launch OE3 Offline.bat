@@ -28,8 +28,10 @@ function Log-Message($msg, $color = "Gray") {
 
 # Clear old log file at startup
 try {
-    $logFile = Join-Path $dir "log.txt"
-    if (Test-Path $logFile) { Remove-Item $logFile -Force -ErrorAction SilentlyContinue }
+    $logFile = [System.IO.Path]::Combine($dir, "log.txt")
+    if ([System.IO.File]::Exists($logFile)) { 
+        [System.IO.File]::Delete($logFile) 
+    }
 } catch {}
 
 Log-Message "=========================================" "Green"
@@ -40,13 +42,27 @@ Log-Message "=========================================" "Green"
 
 # 1. Detailed File Verification
 Log-Message "Verifying folder contents..." "Gray"
-$indexExists = Test-Path (Join-Path $dir "index.html")
-$swfExists = Test-Path (Join-Path $dir "OE3_UPDATED.swf")
-if ($indexExists) { $indexStatus = "FOUND"; $indexColor = "Green" } else { $indexStatus = "MISSING"; $indexColor = "Red" }
-Log-Message "index.html check: $indexStatus" $indexColor
+$indexExists = $false
+$swfExists = $false
 
-if ($swfExists) { $swfStatus = "FOUND"; $swfColor = "Green" } else { $swfStatus = "MISSING"; $swfColor = "Red" }
-Log-Message "OE3_UPDATED.swf check: $swfStatus" $swfColor
+try {
+    $indexPath = [System.IO.Path]::Combine($dir, "index.html")
+    $indexExists = [System.IO.File]::Exists($indexPath)
+    if ($indexExists) { $indexStatus = "FOUND"; $indexColor = "Green" } else { $indexStatus = "MISSING"; $indexColor = "Red" }
+    Log-Message "index.html check: $indexStatus" $indexColor
+} catch {
+    Log-Message "Error checking index.html: $_" "Red"
+}
+
+try {
+    $swfPath = [System.IO.Path]::Combine($dir, "OE3_UPDATED.swf")
+    $swfExists = [System.IO.File]::Exists($swfPath)
+    if ($swfExists) { $swfStatus = "FOUND"; $swfColor = "Green" } else { $swfStatus = "MISSING"; $swfColor = "Red" }
+    Log-Message "OE3_UPDATED.swf check: $swfStatus" $swfColor
+} catch {
+    Log-Message "Error checking OE3_UPDATED.swf: $_" "Red"
+}
+
 
 
 # 2. Port Conflict Auto-Recovery Logic
