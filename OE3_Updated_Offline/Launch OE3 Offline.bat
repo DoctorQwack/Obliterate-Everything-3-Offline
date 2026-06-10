@@ -5,8 +5,8 @@ cd /d "%~dp0"
 :: Graphics backend for Ruffle Desktop. Options: vulkan, dx12, dx11, gl, default
 set "RUFFLE_BACKEND=dx12"
 set "WGPU_BACKEND=dx12"
-:: Launch mode: auto, flashplayer, ruffle, browser (default: auto, prioritizing flashplayer if found)
-set "LAUNCH_MODE=auto"
+:: Launch mode: ask (shows menu), auto (auto-detect), flashplayer, ruffle, browser
+set "LAUNCH_MODE=ask"
 echo Starting OE3 Offline Server...
 echo Keep this window open while playing.
 echo.
@@ -127,12 +127,44 @@ if (-not $listenerStarted) {
     exit
 }
 
-# 4. Open the game (Prioritize Flash Player Projector, then Ruffle Desktop, fallback to Web Browser)
+# 4. Open the game (Interactive Selection, fallback cascade)
 $launchMode = $env:LAUNCH_MODE
 $flashplayerExe = [System.IO.Path]::Combine($dir, "flashplayer.exe")
 $ruffleExe = [System.IO.Path]::Combine($dir, "ruffle.exe")
 
-if (-not $launchMode -or $launchMode -eq "auto") {
+if (-not $launchMode -or $launchMode -eq "default") {
+    $launchMode = "ask"
+}
+
+if ($launchMode -eq "ask") {
+    $hasFlash = [System.IO.File]::Exists($flashplayerExe)
+    $hasRuffle = [System.IO.File]::Exists($ruffleExe)
+    
+    $flashStatus = if ($hasFlash) { "Available - Recommended" } else { "NOT FOUND" }
+    $ruffleStatus = if ($hasRuffle) { "Available" } else { "NOT FOUND" }
+    
+    Log-Message "=========================================" "Cyan"
+    Log-Message "         SELECT LAUNCH MODE             " "Cyan"
+    Log-Message "=========================================" "Cyan"
+    Log-Message " [1] Standalone Flash Player ($flashStatus)" "Green"
+    Log-Message " [2] Ruffle Desktop Player ($ruffleStatus)" "Yellow"
+    Log-Message " [3] Web Browser (Always Available)" "Yellow"
+    Log-Message " [4] Auto-Detect (Dynamic Fallback)" "Gray"
+    Log-Message "=========================================" "Cyan"
+    
+    $choice = Read-Host " Enter choice (1-4, Default is 1)"
+    if ($choice -eq "2") {
+        $launchMode = "ruffle"
+    } elseif ($choice -eq "3") {
+        $launchMode = "browser"
+    } elseif ($choice -eq "4") {
+        $launchMode = "auto"
+    } else {
+        $launchMode = "flashplayer"
+    }
+}
+
+if ($launchMode -eq "auto") {
     if ([System.IO.File]::Exists($flashplayerExe)) {
         $launchMode = "flashplayer"
     } elseif ([System.IO.File]::Exists($ruffleExe)) {
@@ -142,36 +174,46 @@ if (-not $launchMode -or $launchMode -eq "auto") {
     }
 }
 
-Log-Message "Launch mode: $launchMode" "Green"
-
-if ($launchMode -eq "flashplayer" -and [System.IO.File]::Exists($flashplayerExe)) {
-    try {
-        Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using Flash Player Projector..." "Gray"
-        Start-Process -FilePath $flashplayerExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf"
-        Log-Message "Flash Player Projector launched successfully." "Green"
-    } catch {
-        Log-Message "Failed to start Flash Player Projector. Falling back to web browser..." "Yellow"
-        $launchMode = "browser"
+if ($launchMode -eq "flashplayer") {
+    if ([System.IO.File]::Exists($flashplayerExe)) {
+        try {
+            Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using Flash Player Projector..." "Gray"
+            Start-Process -FilePath $flashplayerExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf"
+            Log-Message "Flash Player Projector launched successfully." "Green"
+        } catch {
+            Log-Message "Failed to start Flash Player Projector. Falling back to Ruffle..." "Yellow"
+            $launchMode = "ruffle"
+        }
+    } else {
+        Log-Message "flashplayer.exe not found! Falling back to Ruffle..." "Yellow"
+        $launchMode = "ruffle"
     }
-} elseif ($launchMode -eq "ruffle" -and [System.IO.File]::Exists($ruffleExe)) {
-    try {
-        Log-Message "Found native Ruffle Desktop player (ruffle.exe)." "Green"
-        
-        # Read Ruffle graphics backend configuration (defaults to dx12 to prevent Vulkan driver crashes)
-        $backend = $env:RUFFLE_BACKEND
-        if (-not $backend) { $backend = "dx12" }
-        $env:WGPU_BACKEND = $backend
-        
-        Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using graphics backend '$backend'..." "Gray"
-        Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf", "-g", $backend
-        Log-Message "Ruffle Desktop launched successfully." "Green"
-    } catch {
-        Log-Message "Failed to start Ruffle Desktop. Falling back to web browser..." "Yellow"
+}
+
+if ($launchMode -eq "ruffle") {
+    if ([System.IO.File]::Exists($ruffleExe)) {
+        try {
+            Log-Message "Found native Ruffle Desktop player (ruffle.exe)." "Green"
+            
+            # Read Ruffle graphics backend configuration (defaults to dx12 to prevent Vulkan driver crashes)
+            $backend = $env:RUFFLE_BACKEND
+            if (-not $backend) { $backend = "dx12" }
+            $env:WGPU_BACKEND = $backend
+            
+            Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using graphics backend '$backend'..." "Gray"
+            Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf", "-g", $backend
+            Log-Message "Ruffle Desktop launched successfully." "Green"
+        } catch {
+            Log-Message "Failed to start Ruffle Desktop. Falling back to web browser..." "Yellow"
+            $launchMode = "browser"
+        }
+    } else {
+        Log-Message "ruffle.exe not found! Falling back to web browser..." "Yellow"
         $launchMode = "browser"
     }
 }
 
-if ($launchMode -eq "browser" -or $launchMode -eq "default") {
+if ($launchMode -eq "browser") {
     try {
         Log-Message "Opening default web browser to http://127.0.0.1:$port/..." "Gray"
         Start-Process "http://127.0.0.1:$port/"
@@ -201,7 +243,11 @@ while ($l.IsListening) {
             $reader = New-Object System.IO.StreamReader($req.InputStream)
             $body = $reader.ReadToEnd()
             $reader.Close()
-            $saveFile = Join-Path $dir "save_$user_safe.json"
+            $savesDir = Join-Path $dir "saves"
+            if (-not (Test-Path $savesDir)) {
+                [System.IO.Directory]::CreateDirectory($savesDir) | Out-Null
+            }
+            $saveFile = Join-Path $savesDir "save_$user_safe.json"
             [System.IO.File]::WriteAllText($saveFile, $body)
             $res.StatusCode = 200
             $res.ContentType = "application/json"
@@ -216,7 +262,13 @@ while ($l.IsListening) {
             $user = $req.QueryString["user"]
             $user_safe = [regex]::Replace($user, '[^a-zA-Z0-9_\-]', '')
             if (-not $user_safe) { $user_safe = "GuestPlayer" }
-            $saveFile = Join-Path $dir "save_$user_safe.json"
+            
+            # Check saves folder first, fallback to root folder for backward compatibility
+            $saveFile = Join-Path $dir "saves\save_$user_safe.json"
+            if (-not (Test-Path $saveFile)) {
+                $saveFile = Join-Path $dir "save_$user_safe.json"
+            }
+            
             if (Test-Path $saveFile -PathType Leaf) {
                 $body = [System.IO.File]::ReadAllText($saveFile)
                 $res.StatusCode = 200

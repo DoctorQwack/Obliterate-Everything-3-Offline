@@ -8,6 +8,7 @@ _backup_
 # Player Save Data (User Specific)
 save*.json
 save.json
+saves/
 
 # Zip files/Large Archives
 *.zip
