@@ -7,12 +7,14 @@ package playerio {
 	import flash.events.Event;
 	import flash.events.IOErrorEvent;
 	import flash.utils.getDefinitionByName;
+	import flash.utils.setInterval;
 
 	public class OfflineServer {
 		private static var _instance:OfflineServer;
 
 		private var _saveData:SharedObject;
 		private var _player:Object;
+		private var _config:Object = null;
 		private var _prices:Array; // Array of [creditPrice, platPrice]
 		private var _vault:Array;  // Array of Array of 4 ints (item + 3 upgrades)
 		private var _packs:Array;  // Array of Pack Objects: { name: String, price: int, items: Array of Array of 4 ints }
@@ -39,6 +41,10 @@ package playerio {
 				_instance = new OfflineServer();
 			}
 			return _instance;
+		}
+
+		public function get config():Object {
+			return _config;
 		}
 
 		public function OfflineServer() {
@@ -71,19 +77,28 @@ package playerio {
 			}
 			refreshVault();
 
-			// 3. Initialize Default Item Packs (10 packs)
+			// 3. Initialize Default Item Packs (10 packs with valid whitelisted item IDs)
 			_packs = [];
 			var packNames:Array = [
 				"Starter Pack", "Turret Pack", "Fighter Wing", "Cruiser Squadron", "Heavy Defense Pack",
 				"Advanced Weapons Pack", "Engineer Support Pack", "Carrier Pack", "Doomsday Tech Pack", "Elite Fleet"
 			];
+			var packContents:Array = [
+				[100, 101, 102, 200, 250], // Starter Pack
+				[100, 101, 102, 103, 104], // Turret Pack
+				[200, 201, 202, 203, 204], // Fighter Wing
+				[250, 251, 252, 253, 254], // Cruiser Squadron
+				[105, 106, 107, 110, 111], // Heavy Defense Pack
+				[116, 117, 150, 152, 153], // Advanced Weapons Pack
+				[114, 350, 351, 352, 353], // Engineer Support Pack
+				[252, 256, 301, 302, 308], // Carrier Pack
+				[369, 370, 371, 372, 373], // Doomsday Tech Pack
+				[311, 312, 313, 314, 315]  // Elite Fleet
+			];
 			for (var p:int = 0; p < 10; p++) {
 				var packItems:Array = [];
 				for (var k:int = 0; k < 5; k++) {
-					// Add dummy items based on pack type
-					var itemType:int = 100 + (p * 20) + k;
-					if (itemType > 400) itemType = 100;
-					packItems.push([itemType, -1, -1, -1]);
+					packItems.push([packContents[p][k], -1, -1, -1]);
 				}
 				_packs.push({
 					name: packNames[p],
@@ -94,6 +109,26 @@ package playerio {
 
 			// 4. Initialize dynamic Guest profile by default
 			_player = createNewProfile("GuestPlayer");
+			
+			// Start periodic config polling and time-based vault refreshes
+			setInterval(tickServer, 10000);
+		}
+
+		private function tickServer():void {
+			loadConfig();
+			checkTimeRefresh();
+		}
+
+		private function checkTimeRefresh():void {
+			var periodMinutes:int = (_config && _config.store_refresh_period_minutes) ? _config.store_refresh_period_minutes : 60;
+			var currentPeriod:int = Math.floor(new Date().time / (1000 * 60 * periodMinutes));
+			if (_vaultHour == 0) {
+				_vaultHour = currentPeriod;
+			}
+			if (currentPeriod != _vaultHour) {
+				_vaultHour = currentPeriod;
+				refreshVault();
+			}
 		}
 
 		private function createNewProfile(username:String):Object {
@@ -215,7 +250,33 @@ package playerio {
 			}
 		}
 
+		private function loadConfig():void {
+			try {
+				var url:String = "/config";
+				var request:URLRequest = new URLRequest(url);
+				var loader:URLLoader = new URLLoader();
+				loader.addEventListener(Event.COMPLETE, function(e:Event):void {
+					try {
+						_config = parseJSON(loader.data);
+						trace("Loaded launcher config from server.");
+						if (_config && _config.force_vault_refresh) {
+							refreshVault(true);
+						}
+					} catch (err:Error) {
+						trace("Error parsing launcher config: " + err.message);
+					}
+				});
+				loader.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent):void {
+					trace("Failed to load launcher config from server.");
+				});
+				loader.load(request);
+			} catch (e:Error) {
+				trace("Error calling /config: " + e.message);
+			}
+		}
+
 		private function loadAndLoginUser(username:String, connection:LocalConnection):void {
+			loadConfig();
 			var url:String = "/load?user=" + encodeURIComponent(username);
 			var request:URLRequest = new URLRequest(url);
 			var loader:URLLoader = new URLLoader();
@@ -595,9 +656,13 @@ package playerio {
 							case 3: platAdd = 700; break;
 							case 4: platAdd = 1500; break;
 						}
-						_player.platinum += platAdd;
-						saveProfile();
-						sendPlatinum(connection);
+						if (_config && _config.disable_plat_purchase == true) {
+							logToServer("Platinum purchase blocked (Disabled in terminal config)", "WARNING");
+						} else {
+							_player.platinum += platAdd;
+							saveProfile();
+							sendPlatinum(connection);
+						}
 						break;
 
 					case "supgrade":
@@ -840,6 +905,16 @@ package playerio {
 		}
 
 		private function sendVault(connection:LocalConnection):void {
+			var periodMinutes:int = (_config && _config.store_refresh_period_minutes) ? _config.store_refresh_period_minutes : 60;
+			var currentPeriod:int = Math.floor(new Date().time / (1000 * 60 * periodMinutes));
+			if (_vaultHour == 0) {
+				_vaultHour = currentPeriod;
+			}
+			if (currentPeriod != _vaultHour) {
+				_vaultHour = currentPeriod;
+				refreshVault();
+			}
+
 			var msg:LocalMessage = new LocalMessage("srvault");
 			for (var i:int = 0; i < _vault.length; i++) {
 				msg.add(_vault[i][0]);
@@ -868,21 +943,26 @@ package playerio {
 		}
 
 		private function sendVaultClock(connection:LocalConnection):void {
-			// Update clock based on execution duration (refresh vault every hour simulated)
-			var elapsedMs:Number = getTimer() - _lastVaultCheck;
-			var simulatedSeconds:int = Math.floor(elapsedMs / 1000);
-			
-			_vaultMinute = simulatedSeconds % 60;
-			_vaultHour = 0;
-			
-			if (simulatedSeconds >= 3600) {
-				refreshVault();
-				_lastVaultCheck = getTimer();
+			var periodMinutes:int = (_config && _config.store_refresh_period_minutes) ? _config.store_refresh_period_minutes : 60;
+			var currentPeriod:int = Math.floor(new Date().time / (1000 * 60 * periodMinutes));
+			if (_vaultHour == 0) {
+				_vaultHour = currentPeriod;
 			}
-
+			if (currentPeriod != _vaultHour) {
+				_vaultHour = currentPeriod;
+				refreshVault();
+			}
+			
+			var totalMinutes:int = Math.floor(new Date().time / (1000 * 60));
+			var elapsedMinutesInPeriod:int = totalMinutes % periodMinutes;
+			var minutesRemaining:int = periodMinutes - elapsedMinutesInPeriod;
+			
+			var hoursRemaining:int = Math.floor(minutesRemaining / 60);
+			var minutesRemainingInHour:int = minutesRemaining % 60;
+			
 			var msg:LocalMessage = new LocalMessage("svaultclock");
-			msg.add(_vaultHour);
-			msg.add(60 - _vaultMinute);
+			msg.add(hoursRemaining); // Hours remaining
+			msg.add(minutesRemainingInHour); // Minutes remaining
 			connection.receiveFromServer(msg);
 		}
 
@@ -891,10 +971,15 @@ package playerio {
 			profile.stations = MAX_STATIONS;
 		}
 
-		private function refreshVault():void {
-			// Seed with UTC hours since epoch for globally synchronized hourly shop items
-			var hoursSinceEpoch:uint = uint(Math.floor(new Date().time / (1000 * 60 * 60))) & 0x7FFFFFFF;
-			seedRNG(hoursSinceEpoch);
+		private function refreshVault(isForced:Boolean = false):void {
+			var periodMinutes:int = (_config && _config.store_refresh_period_minutes) ? _config.store_refresh_period_minutes : 60;
+			var seed:uint;
+			if (isForced) {
+				seed = uint(new Date().time) & 0x7FFFFFFF;
+			} else {
+				seed = uint(Math.floor(new Date().time / (1000 * 60 * periodMinutes))) & 0x7FFFFFFF;
+			}
+			seedRNG(seed);
 
 			// Populate shop vault with 11 random items
 			for (var i:int = 0; i < 11; i++) {
@@ -915,6 +1000,14 @@ package playerio {
 					}
 				}
 				fixItem(_vault[i]);
+			}
+
+			// Notify all active connections
+			if (_connections) {
+				for (var j:int = 0; j < _connections.length; j++) {
+					sendVault(_connections[j]);
+					sendVaultClock(_connections[j]);
+				}
 			}
 		}
 

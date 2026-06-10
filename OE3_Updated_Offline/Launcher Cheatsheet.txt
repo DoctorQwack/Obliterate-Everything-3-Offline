@@ -1,0 +1,141 @@
+================================================================================
+                    OBLITERATE EVERYTHING 3 OFFLINE EDITION
+                           LAUNCHER & SERVER CHEATSHEET
+================================================================================
+
+This document details all configuration options and interactive console commands
+available for the Obliterate Everything 3 Offline Server.
+
+--------------------------------------------------------------------------------
+1. CONSOLE MODE OVERVIEW
+--------------------------------------------------------------------------------
+When the server is running, the terminal window runs in the background. To enter
+the interactive console mode, click on the terminal window and press ANY KEY
+(except Ctrl+C, which stops the server immediately).
+
+Once in console mode:
+- The command prompt is displayed as: Console>
+- The background server remains running, so active games will continue.
+- Type any command listed below and press Enter.
+- Type 'exit' or 'resume' to exit console mode and return to background mode.
+
+--------------------------------------------------------------------------------
+2. INTERACTIVE CONSOLE COMMANDS
+--------------------------------------------------------------------------------
+
+* help
+  Description: Displays a list of all available commands and brief descriptions.
+  Example:     Console> help
+
+* launch
+  Description: Launches a new instance of the game using the current launch mode.
+               Use this to start a new game or run multiple clients at once on
+               the same local server without closing the server. Each launched
+               window is named "OE3 Instance <number>" for easy identification.
+  Example:     Console> launch
+
+* instances
+  Description: Lists all active game instances that were launched from this
+               terminal session, showing their Instance ID, Process ID (PID),
+               launch mode, and start time.
+  Example:     Console> instances
+
+* close <id>
+  Description: Closes a specific game instance by its ID number.
+  Example:     Console> close 2
+
+* logout
+  Description: Sends a logout signal to all currently connected game clients.
+               This immediately logs them out and returns them back to the
+               game's login screen to select another user profile.
+  Example:     Console> logout
+
+* logs
+  Description: Displays the last 20 log entries from 'log.txt'. Useful for
+               debugging save, load, or Ruffle loading errors.
+  Example:     Console> logs
+
+* config
+  Description: Displays the current launcher configuration stored in 'config.json'.
+  Example:     Console> config
+
+* mode <type>
+  Description: Updates the default launch mode. The selection is saved to
+               'config.json' and will be used on future boots.
+  Valid Types:
+    - ask:          Prompts for launch mode selection on each startup.
+    - flashplayer:  Launches native Flash Player Projector (flashplayer.exe).
+    - ruffle:       Launches native Ruffle Desktop player (ruffle.exe).
+    - browser:      Opens index.html in the default Web Browser.
+    - auto:         Automatically detects and uses the best available player.
+  Example:     Console> mode flashplayer
+
+* quality <val>
+  Description: Sets the default Ruffle emulator quality. The client automatically
+               reads this setting when no browser override is present.
+  Valid Values:
+    - high:   Vibrant graphics, may cause performance lag on slower GPUs.
+    - medium: Balanced performance and quality (Recommended default).
+    - low:    Fastest frame rate, removes advanced pixel filters/glows.
+  Example:     Console> quality medium
+
+* backend <type>
+  Description: Changes the hardware graphics backend used by Ruffle Desktop.
+               Useful if you encounter Vulkan driver panic crashes.
+  Valid Backends: dx12, vulkan, dx11, gl, default
+  Example:     Console> backend dx12
+
+* plat <on/off>
+  Description: Toggles the ability to purchase/add free Platinum from in-game.
+               - 'off' / 'disable': Blocks any free platinum additions.
+               - 'on' / 'enable': Allows standard offline platinum additions.
+  Example:     Console> plat off
+
+* store-period <minutes>
+  Description: Sets the store refresh period in minutes. The store items and clock
+               will automatically roll over at this frequency. Changing this
+               setting immediately triggers a store refresh using the new period.
+  Example:     Console> store-period 30
+
+* refresh-store
+  Description: Forces an immediate refresh of the shop items and the store clock.
+               The game client polls the server every 10 seconds; when you run
+               this command, the store items will regenerate on the next poll
+               without requiring you to restart or log out.
+  Example:     Console> refresh-store
+
+* saves
+  Description: Opens the local 'saves/' directory in Windows Explorer.
+  Example:     Console> saves
+
+* check-saves
+  Description: Scans the 'saves/' directory and checks all save files (.json) for
+               integrity. Reports profile size, last modification time, and whether
+               the save file structure is valid.
+  Example:     Console> check-saves
+
+* diagnostics
+  Description: Runs server health diagnostics, checking PowerShell version, file
+               integrity for index.html/swf/exe, and loopback port binding.
+  Example:     Console> diagnostics
+
+* shutdown
+  Description: Gracefully stops the HTTP server listener, closes all active game
+               windows, and exits the terminal window.
+  Example:     Console> shutdown
+
+--------------------------------------------------------------------------------
+3. CONFIGURATION FILE (config.json)
+--------------------------------------------------------------------------------
+Your choices are saved in 'config.json' in the same folder as the server.
+Here is an example format of a saved config file:
+
+{
+  "launch_mode": "flashplayer",
+  "remember_mode": true,
+  "ruffle_backend": "dx12",
+  "default_quality": "medium",
+  "disable_plat_purchase": false,
+  "store_refresh_period_minutes": 60
+}
+================================================================================

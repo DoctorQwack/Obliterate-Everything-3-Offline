@@ -1,4 +1,4 @@
-﻿package
+package
 {
 	import flash.display.MovieClip;
 	import flash.display.Bitmap;
@@ -505,10 +505,26 @@
 			var newBitmapb;
 			var classname;
 			
-			classname = getDefinitionByName("Rare") as Class;
-			newBitmap = new classname(0,0);
-			classname = getDefinitionByName("I" + String(i)) as Class;
-			iconBitmap = new classname(0,0);
+			try {
+				classname = getDefinitionByName("Rare") as Class;
+				newBitmap = new classname(0,0);
+			} catch (e:Error) {
+				newBitmap = new BitmapData(64,64,true,0x00000000);
+			}
+			
+			try {
+				classname = getDefinitionByName("I" + String(i)) as Class;
+				iconBitmap = new classname(0,0);
+			} catch (e:Error) {
+				trace("StoreIcon Error: Class I" + i + " not found, using fallback");
+				try {
+					classname = getDefinitionByName("I100") as Class;
+					iconBitmap = new classname(0,0);
+				} catch (e2:Error) {
+					iconBitmap = new BitmapData(64,64,true,0x00000000);
+				}
+			}
+			
 			ProIcon(i,iconBitmap);
 			
 			if(j == 1){

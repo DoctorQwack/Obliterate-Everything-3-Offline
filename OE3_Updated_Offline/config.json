@@ -1,0 +1,8 @@
+﻿{
+    "launch_mode":  "auto",
+    "remember_mode":  true,
+    "ruffle_backend":  "dx12",
+    "default_quality":  "medium",
+    "disable_plat_purchase":  false,
+    "store_refresh_period_minutes":  60
+}

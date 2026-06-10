@@ -219,21 +219,21 @@
     const statusEl = document.getElementById("status");
     const qualitySelect = document.getElementById("quality-select");
     
-    // Read cached quality or default to medium to resolve lag/audio pops
-    const savedQuality = localStorage.getItem("oe3_quality") || "medium";
-    qualitySelect.value = savedQuality;
-    
     // Configure Ruffle Player settings globally
     window.RufflePlayer = window.RufflePlayer || {};
     window.RufflePlayer.config = {
-      quality: savedQuality,
+      quality: "medium",
       autoplay: "on",
       scale: "showAll",
       allowScriptAccess: true,
       unmuteOverlay: "hidden"
     };
     
-    // Listen for quality changes, save to cache and reload
+    let savedQuality = localStorage.getItem("oe3_quality") || "medium";
+    qualitySelect.value = savedQuality;
+    window.RufflePlayer.config.quality = savedQuality;
+    
+    // Listen for quality changes
     qualitySelect.addEventListener("change", function() {
       localStorage.setItem("oe3_quality", qualitySelect.value);
       statusEl.textContent = "Applying graphics settings...";
@@ -288,6 +288,24 @@
       console.log("Window load event. Setting up Ruffle...");
       statusEl.textContent = "Loading Ruffle Engine...";
       
+      // Fetch server configuration to read dynamic default settings
+      fetch('/config')
+        .then(r => r.json())
+        .then(cfg => {
+          if (cfg && cfg.default_quality && !localStorage.getItem("oe3_quality")) {
+            savedQuality = cfg.default_quality;
+            localStorage.setItem("oe3_quality", savedQuality);
+            qualitySelect.value = savedQuality;
+            window.RufflePlayer.config.quality = savedQuality;
+          }
+          initializeRuffle();
+        }).catch(err => {
+          console.log("Failed to load server config, using defaults:", err);
+          initializeRuffle();
+        });
+    });
+
+    function initializeRuffle() {
       const ruffle = window.RufflePlayer.newest();
       if (!ruffle) {
         console.error("RufflePlayer.newest() returned undefined. ruffle.js may have failed to load.");
@@ -319,7 +337,7 @@
         statusEl.textContent = "Error loading SWF. Check console.";
         statusEl.style.color = "#ff5555";
       });
-    });
+    }
   </script>
 </body>
 </html>

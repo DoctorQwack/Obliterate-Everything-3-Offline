@@ -8,6 +8,8 @@ package
 	import flash.display.Graphics;
 	import flash.display.Bitmap;
 	import flash.display.BitmapData;
+	import flash.display.Sprite;
+	import playerio.OfflineServer;
 		
 	public class BaseScreen extends MovieClip 
 	{
@@ -392,6 +394,54 @@ package
 			profilescreen.kplusstations.mom = mom;
 			profilescreen.kplusstations.id = 2;
 			
+			// Dynamic Logout Button
+			var logoutBtn:Sprite = new Sprite();
+			logoutBtn.graphics.beginFill(0x1C1C24);
+			logoutBtn.graphics.drawRoundRect(0, 0, 70, 20, 6, 6);
+			logoutBtn.graphics.endFill();
+			logoutBtn.buttonMode = true;
+			logoutBtn.useHandCursor = true;
+			
+			var logoutTf:TextFormat = new TextFormat();
+			logoutTf.font = "Outfit";
+			logoutTf.size = 10;
+			logoutTf.color = 0xFFFFFF;
+			logoutTf.bold = true;
+			logoutTf.align = "center";
+			
+			var logoutTxt:TextField = new TextField();
+			logoutTxt.defaultTextFormat = logoutTf;
+			logoutTxt.text = "LOGOUT";
+			logoutTxt.width = 70;
+			logoutTxt.height = 18;
+			logoutTxt.y = 2;
+			logoutTxt.selectable = false;
+			logoutTxt.mouseEnabled = false;
+			logoutBtn.addChild(logoutTxt);
+			
+			logoutBtn.x = profilescreen.x + 40;
+			logoutBtn.y = profilescreen.y + 60; // sits below profilescreen
+			addChild(logoutBtn);
+			
+			logoutBtn.addEventListener(MouseEvent.MOUSE_OVER, function(e:MouseEvent):void {
+				logoutBtn.graphics.clear();
+				logoutBtn.graphics.beginFill(0xD32F2F); // sleek red hover
+				logoutBtn.graphics.drawRoundRect(0, 0, 70, 20, 6, 6);
+				logoutBtn.graphics.endFill();
+			});
+			logoutBtn.addEventListener(MouseEvent.MOUSE_OUT, function(e:MouseEvent):void {
+				logoutBtn.graphics.clear();
+				logoutBtn.graphics.beginFill(0x1C1C24);
+				logoutBtn.graphics.drawRoundRect(0, 0, 70, 20, 6, 6);
+				logoutBtn.graphics.endFill();
+			});
+			logoutBtn.addEventListener(MouseEvent.CLICK, function(e:MouseEvent):void {
+				if (mom.n && mom.n.conn) {
+					mom.n.conn.disconnect();
+				}
+				mom.SwitchScreen(5);
+			});
+			
 			knobexclam = new KnobExclam();
 			addChild(knobexclam);
 			knobexclam.visible = false;
@@ -465,6 +515,15 @@ package
 		
 		public function DoStuff()
 		{
+			if (OfflineServer.getInstance().config && OfflineServer.getInstance().config.force_logout == true) {
+				OfflineServer.getInstance().config.force_logout = false;
+				if (mom.n && mom.n.conn) {
+					mom.n.conn.disconnect();
+				}
+				mom.SwitchScreen(5);
+				return;
+			}
+			
 			var a;
 			var i:int;
 			var j:int;
@@ -498,6 +557,17 @@ package
 			}
 			multiscreen.ra.gotoAndStop(rpic);
 			multiscreen.rb.gotoAndStop(rpic);
+			
+			var storePeriod:int = 60;
+			if (OfflineServer.getInstance().config && OfflineServer.getInstance().config.store_refresh_period_minutes) {
+				storePeriod = OfflineServer.getInstance().config.store_refresh_period_minutes;
+			}
+			var totalMinutes:int = Math.floor(new Date().time / (1000 * 60));
+			var elapsedMinutesInPeriod:int = totalMinutes % storePeriod;
+			var minutesRemaining:int = storePeriod - elapsedMinutesInPeriod;
+			
+			mom.account.vaulthours = Math.floor(minutesRemaining / 60);
+			mom.account.vaultminutes = minutesRemaining % 60;
 			
 			if(mom.account.vaulthours > 0){
 				vaultscreen.updatetxt.text = "Updating in " + String(mom.account.vaulthours) + "h " + String(mom.account.vaultminutes) + "m";
@@ -1163,14 +1233,17 @@ package
 			packsscreen.pa.kb.cobj.gotoAndStop(2);
 			packsscreen.pa.kb.price.text = String(mom.account.packprices[a]);
 			packsscreen.pa.ptxt.text = mom.account.packnames[a];
+			packsscreen.pa.kb.id = a;
 			packsscreen.pa.kbt.id = a;
 			packsscreen.pb.kb.cobj.gotoAndStop(2);
 			packsscreen.pb.kb.price.text = String(mom.account.packprices[a+1]);
 			packsscreen.pb.ptxt.text = mom.account.packnames[a+1];
+			packsscreen.pb.kb.id = a+1;
 			packsscreen.pb.kbt.id = a+1;
 			packsscreen.pc.kb.cobj.gotoAndStop(2);
 			packsscreen.pc.kb.price.text = String(mom.account.packprices[a+2]);
 			packsscreen.pc.ptxt.text = mom.account.packnames[a+2];
+			packsscreen.pc.kb.id = a+2;
 			packsscreen.pc.kbt.id = a+2;
 			
 			storescreen.setChildIndex(packsscreen,1);
