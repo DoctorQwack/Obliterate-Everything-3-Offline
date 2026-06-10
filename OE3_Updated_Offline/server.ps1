@@ -120,8 +120,7 @@ for ($i = 0; $i -lt $maxTries; $i++) {
 
 if (-not $listenerStarted) {
     Log-Message "ERROR: Could not find any available port to start the HTTP listener (tried ports $port to $($port + $maxTries - 1))." "Red"
-    Read-Host "Press Enter to exit..."
-    exit
+    exit 1
 }
 
 # 4. Open the game (Interactive Selection, fallback cascade)
@@ -171,11 +170,13 @@ if ($launchMode -eq "auto") {
     }
 }
 
+$gameProcess = $null
+
 if ($launchMode -eq "flashplayer") {
     if ([System.IO.File]::Exists($flashplayerExe)) {
         try {
             Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using Flash Player Projector..." "Gray"
-            Start-Process -FilePath $flashplayerExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf"
+            $gameProcess = Start-Process -FilePath $flashplayerExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf" -PassThru
             Log-Message "Flash Player Projector launched successfully." "Green"
         } catch {
             Log-Message "Failed to start Flash Player Projector. Falling back to Ruffle..." "Yellow"
@@ -198,7 +199,7 @@ if ($launchMode -eq "ruffle") {
             $env:WGPU_BACKEND = $backend
             
             Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using graphics backend '$backend'..." "Gray"
-            Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf", "-g", $backend
+            $gameProcess = Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf", "-g", $backend -PassThru
             Log-Message "Ruffle Desktop launched successfully." "Green"
         } catch {
             Log-Message "Failed to start Ruffle Desktop. Falling back to web browser..." "Yellow"
@@ -224,10 +225,27 @@ Log-Message "Server is running. Keep this window open while playing!" "Gray"
 Log-Message "Press Ctrl+C in this window to stop the server." "Gray"
 Log-Message ""
 
+$contextAsync = $l.BeginGetContext($null, $null)
+
 while ($l.IsListening) {
     $res = $null
     try {
-        $c = $l.GetContext()
+        # Non-blocking wait for HTTP requests while checking if the game player exited
+        while (-not $contextAsync.IsCompleted) {
+            if ($gameProcess -and $gameProcess.HasExited) {
+                Log-Message "Game process has closed. Shutting down server..." "Yellow"
+                $l.Stop()
+                break
+            }
+            Start-Sleep -Milliseconds 150
+        }
+        
+        if (-not $l.IsListening) { break }
+        
+        $c = $l.EndGetContext($contextAsync)
+        # Immediately begin listening for the next request in the background
+        $contextAsync = $l.BeginGetContext($null, $null)
+        
         $req = $c.Request
         $res = $c.Response
         
