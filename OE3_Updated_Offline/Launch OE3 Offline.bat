@@ -5,6 +5,8 @@ cd /d "%~dp0"
 :: Graphics backend for Ruffle Desktop. Options: vulkan, dx12, dx11, gl, default
 set "RUFFLE_BACKEND=dx12"
 set "WGPU_BACKEND=dx12"
+:: Launch mode: auto, flashplayer, ruffle, browser (default: auto, prioritizing flashplayer if found)
+set "LAUNCH_MODE=auto"
 echo Starting OE3 Offline Server...
 echo Keep this window open while playing.
 echo.
@@ -125,9 +127,33 @@ if (-not $listenerStarted) {
     exit
 }
 
-# 4. Open the game (Native Ruffle Desktop if available, otherwise Web Browser)
+# 4. Open the game (Prioritize Flash Player Projector, then Ruffle Desktop, fallback to Web Browser)
+$launchMode = $env:LAUNCH_MODE
+$flashplayerExe = [System.IO.Path]::Combine($dir, "flashplayer.exe")
 $ruffleExe = [System.IO.Path]::Combine($dir, "ruffle.exe")
-if ([System.IO.File]::Exists($ruffleExe)) {
+
+if (-not $launchMode -or $launchMode -eq "auto") {
+    if ([System.IO.File]::Exists($flashplayerExe)) {
+        $launchMode = "flashplayer"
+    } elseif ([System.IO.File]::Exists($ruffleExe)) {
+        $launchMode = "ruffle"
+    } else {
+        $launchMode = "browser"
+    }
+}
+
+Log-Message "Launch mode: $launchMode" "Green"
+
+if ($launchMode -eq "flashplayer" -and [System.IO.File]::Exists($flashplayerExe)) {
+    try {
+        Log-Message "Launching game natively on http://127.0.0.1:$port/OE3_UPDATED.swf using Flash Player Projector..." "Gray"
+        Start-Process -FilePath $flashplayerExe -ArgumentList "http://127.0.0.1:$port/OE3_UPDATED.swf"
+        Log-Message "Flash Player Projector launched successfully." "Green"
+    } catch {
+        Log-Message "Failed to start Flash Player Projector. Falling back to web browser..." "Yellow"
+        $launchMode = "browser"
+    }
+} elseif ($launchMode -eq "ruffle" -and [System.IO.File]::Exists($ruffleExe)) {
     try {
         Log-Message "Found native Ruffle Desktop player (ruffle.exe)." "Green"
         
@@ -141,13 +167,11 @@ if ([System.IO.File]::Exists($ruffleExe)) {
         Log-Message "Ruffle Desktop launched successfully." "Green"
     } catch {
         Log-Message "Failed to start Ruffle Desktop. Falling back to web browser..." "Yellow"
-        try {
-            Start-Process "http://127.0.0.1:$port/"
-        } catch {
-            Log-Message "Could not open browser. Please open http://127.0.0.1:$port/ manually." "Yellow"
-        }
+        $launchMode = "browser"
     }
-} else {
+}
+
+if ($launchMode -eq "browser" -or $launchMode -eq "default") {
     try {
         Log-Message "Opening default web browser to http://127.0.0.1:$port/..." "Gray"
         Start-Process "http://127.0.0.1:$port/"
