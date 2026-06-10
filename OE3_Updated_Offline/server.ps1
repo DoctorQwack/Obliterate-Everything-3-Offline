@@ -3,6 +3,16 @@ $dir = $PSScriptRoot
 if (-not $dir) { $dir = Get-Location }
 $dir = $dir.ToString().TrimEnd('\')
 
+function Log-Message($msg, $color = "Gray") {
+    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $formattedMsg = "[$time] $msg"
+    Write-Host $formattedMsg -ForegroundColor $color
+    try {
+        $logFile = Join-Path $dir "log.txt"
+        Add-Content -Path $logFile -Value $formattedMsg -ErrorAction SilentlyContinue
+    } catch {}
+}
+
 Write-Host "=========================================" -ForegroundColor Green
 Write-Host "   OE3 Offline Server Starting...        " -ForegroundColor Green
 Write-Host "   Serving from: $dir" -ForegroundColor Cyan
@@ -10,20 +20,21 @@ Write-Host "   URL: http://localhost:$port/" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Green
 
 # Port Conflict Auto-Recovery Logic
-$conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($conn) {
-    $pidToKill = $conn.OwningProcess
-    if ($pidToKill -ne $PID -and $pidToKill -gt 4) {
-        Write-Host "Port $port is currently blocked by process PID $pidToKill (likely an orphaned server)." -ForegroundColor Yellow
-        Write-Host "Attempting to release the port automatically..." -ForegroundColor Yellow
-        try {
+try {
+    $netstat = netstat -ano | Select-String ":$port\s+" | Select-Object -First 1
+    if ($netstat) {
+        $parts = $netstat.Line.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries)
+        $pidToKill = [int]$parts[-1]
+        if ($pidToKill -ne $PID -and $pidToKill -gt 4) {
+            Log-Message "Port $port is currently blocked by process PID $pidToKill (likely an orphaned server)." "Yellow"
+            Log-Message "Attempting to release the port automatically..." "Yellow"
             Stop-Process -Id $pidToKill -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 1
-            Write-Host "Port released successfully!" -ForegroundColor Green
-        } catch {
-            Write-Host "Failed to release port automatically. You may need to close the program using it." -ForegroundColor Red
+            Log-Message "Port released successfully!" "Green"
         }
     }
+} catch {
+    Log-Message "Error checking port conflicts: $_" "Yellow"
 }
 
 $l = New-Object Net.HttpListener
@@ -73,7 +84,7 @@ while ($l.IsListening) {
             $writer = New-Object System.IO.StreamWriter($res.OutputStream)
             $writer.Write('{"status":"ok"}')
             $writer.Close()
-            Write-Host " -> 200 OK (Saved profile to save_$user_safe.json)" -ForegroundColor Green
+            Log-Message "Request: POST /save?user=$user_safe -> 200 OK (Saved profile)" "Green"
             $res.Close()
             continue
         }
@@ -89,15 +100,24 @@ while ($l.IsListening) {
                 $writer = New-Object System.IO.StreamWriter($res.OutputStream)
                 $writer.Write($body)
                 $writer.Close()
-                Write-Host " -> 200 OK (Loaded profile from save_$user_safe.json)" -ForegroundColor Green
+                Log-Message "Request: GET /load?user=$user_safe -> 200 OK (Loaded profile)" "Green"
             } else {
                 $res.StatusCode = 404
                 $res.ContentType = "application/json"
                 $writer = New-Object System.IO.StreamWriter($res.OutputStream)
                 $writer.Write('{"error":"no save file"}')
                 $writer.Close()
-                Write-Host " -> 404 Not Found (No save_$user_safe.json)" -ForegroundColor Yellow
+                Log-Message "Request: GET /load?user=$user_safe -> 404 Not Found (No save file)" "Yellow"
             }
+            $res.Close()
+            continue
+        }
+        if ($p -eq 'log' -and $req.HttpMethod -eq 'POST') {
+            $reader = New-Object System.IO.StreamReader($req.InputStream)
+            $body = $reader.ReadToEnd()
+            $reader.Close()
+            Log-Message "[CLIENT] $body" "Cyan"
+            $res.StatusCode = 200
             $res.Close()
             continue
         }
@@ -108,7 +128,7 @@ while ($l.IsListening) {
         $p_win = $p -replace '/', '\'
         $f = Join-Path $dir $p_win
         
-        Write-Host "Request: $($req.HttpMethod) /$p" -NoNewline
+        $logStr = "Request: $($req.HttpMethod) /$p"
         
         if (Test-Path $f -PathType Leaf) {
             $e = [System.IO.Path]::GetExtension($f).ToLower()
@@ -133,18 +153,18 @@ while ($l.IsListening) {
             
             try {
                 $fs.CopyTo($res.OutputStream)
-                Write-Host " -> 200 OK ($($fs.Length) bytes, $t)" -ForegroundColor Green
+                Log-Message "$logStr -> 200 OK ($($fs.Length) bytes, $t)" "Green"
             } finally {
                 $fs.Close()
             }
         } else {
             $res.StatusCode = 404
-            Write-Host " -> 404 Not Found" -ForegroundColor Yellow
+            Log-Message "$logStr -> 404 Not Found" "Yellow"
         }
         
         $res.Close()
     } catch {
-        Write-Host " -> ERROR: $_" -ForegroundColor Red
+        Log-Message "Request: $($req.HttpMethod) /$p -> ERROR: $_" "Red"
         # Make sure response is closed in case of exception to avoid hanging the client browser connection
         if ($null -ne $res) {
             try { $res.Close() } catch {}

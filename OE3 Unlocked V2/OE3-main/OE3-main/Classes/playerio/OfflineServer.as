@@ -192,6 +192,20 @@ package playerio {
 			return "";
 		}
 
+		private function logToServer(msg:String, level:String = "INFO"):void {
+			try {
+				var url:String = "http://localhost:8765/log";
+				var request:URLRequest = new URLRequest(url);
+				request.method = URLRequestMethod.POST;
+				request.data = "[" + level + "] " + msg;
+				request.contentType = "text/plain";
+				var loader:URLLoader = new URLLoader();
+				loader.load(request);
+			} catch (e:Error) {
+				trace("Failed to send log to server: " + e.message);
+			}
+		}
+
 		private function loadAndLoginUser(username:String, connection:LocalConnection):void {
 			var url:String = "http://localhost:8765/load?user=" + encodeURIComponent(username);
 			var request:URLRequest = new URLRequest(url);
@@ -205,27 +219,34 @@ package playerio {
 						_player.username = username;
 						_player.callsign = username;
 						trace("Loaded user save from file: " + username);
+						logToServer("Loaded user save from file: " + username, "INFO");
 					} else {
 						_player = createNewProfile(username);
+						logToServer("Corrupt or invalid local file save for " + username + ". Created new profile.", "WARNING");
 					}
 				} catch (err:Error) {
 					_player = createNewProfile(username);
+					logToServer("Error parsing local file save for " + username + ": " + err.message + ". Created new profile.", "ERROR");
 				}
 				completeLogin(connection);
 			});
 			
 			loader.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent):void {
 				trace("No local save file found for " + username + ". Checking SharedObject...");
+				logToServer("No local save file found for " + username + ". Checking SharedObject...", "INFO");
 				try {
 					var userSaveData:SharedObject = SharedObject.getLocal("OE3_Offline_SaveData_" + username);
 					if (userSaveData.data.player != null) {
 						_player = userSaveData.data.player;
 						trace("Loaded user save from SharedObject: " + username);
+						logToServer("Loaded user save from SharedObject: " + username, "INFO");
 					} else {
 						_player = createNewProfile(username);
+						logToServer("No SharedObject save found for " + username + ". Created new profile.", "INFO");
 					}
 				} catch (err:Error) {
 					_player = createNewProfile(username);
+					logToServer("Error accessing SharedObject for " + username + ": " + err.message + ". Created new profile.", "ERROR");
 				}
 				completeLogin(connection);
 			});
@@ -238,6 +259,7 @@ package playerio {
 			setStations(_player);
 			sendServiceInitData(connection);
 			connection.receiveFromServer(new LocalMessage("sloggedon"));
+			logToServer("User login complete: " + _player.username, "INFO");
 		}
 
 		private function saveToLocalFile():void {
@@ -251,8 +273,10 @@ package playerio {
 				request.contentType = "application/json";
 				var loader:URLLoader = new URLLoader();
 				loader.load(request);
+				logToServer("Saved profile changes to local save file.", "INFO");
 			} catch (e:Error) {
 				trace("Failed to save to local file: " + e.message);
+				logToServer("Failed to save profile to local file: " + e.message, "ERROR");
 			}
 		}
 
@@ -328,6 +352,7 @@ package playerio {
 
 						sendServiceInitData(connection);
 						connection.receiveFromServer(new LocalMessage("screated"));
+						logToServer("Created new user account: " + newUsername, "INFO");
 						break;
 
 					case "skong":
@@ -351,6 +376,7 @@ package playerio {
 							saveProfile();
 							sendAccount(connection);
 							sendCampaign(connection);
+							logToServer("Started new campaign with danger class: " + selectedDangerClass, "INFO");
 						}
 						break;
 
@@ -361,6 +387,7 @@ package playerio {
 							_player.stations -= 1;
 							saveProfile();
 							connection.receiveFromServer(new LocalMessage("sstartmission"));
+							logToServer("Player requested mission ID: " + missionId, "INFO");
 						}
 						break;
 
@@ -371,6 +398,7 @@ package playerio {
 					case "sgameover":
 						var result:int = message.getInt(0);
 						if (_player.currentmission != -1) {
+							logToServer("Mission over. ID: " + _player.currentmission + " | Result: " + (result == 1 ? "Victory" : "Defeat"), "INFO");
 							if (result == 1) { // Victory
 								_player.stations += 1;
 								if (_player.currentmission != 1000) {
@@ -430,6 +458,7 @@ package playerio {
 								sendArmory(connection);
 								sendPlatinum(connection);
 								connection.receiveFromServer(new LocalMessage("sbought"));
+								logToServer("Bought item from vault slot " + vaultSlot + " (Item ID: " + vaultItem[0] + ")", "INFO");
 							}
 						} else {
 							connection.receiveFromServer(new LocalMessage("snospace"));
@@ -465,6 +494,7 @@ package playerio {
 								sendEquip(connection);
 							}
 							connection.receiveFromServer(new LocalMessage("ssold"));
+							logToServer("Sold item from armory slot " + sellSlot, "INFO");
 						}
 						break;
 
@@ -590,6 +620,7 @@ package playerio {
 
 								sendAccount(connection);
 								sendArmory(connection);
+								logToServer("Upgraded item in slot " + upgradeSlot + " (New upgrades: " + upItem[1] + ", " + upItem[2] + ", " + upItem[3] + ")", "INFO");
 							}
 						}
 						break;
