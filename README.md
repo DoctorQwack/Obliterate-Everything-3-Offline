@@ -7,6 +7,8 @@ A fully-featured, standalone offline player wrapper and mock server emulator for
 ## Key Features
 
 - **Local Profiles & Save Files**: All progress is automatically stored in standard JSON format in the `saves/` folder.
+- **Direct Login by Callsign**: Log in using your readable Kongregate username (case-insensitively!) instead of the numeric ID key (e.g. typing `CristianoP5` or `cristianop5` directly on the login screen).
+- **Legacy Save Converter**: Convert old online saves to the new offline format using a cybernetic Web UI.
 - **Working Store & Item Packs**: Access the shop vault and themed item packs using free, offline-earned Credits and Platinum.
 - **Configurable Store Refresh Period**: Change the store refresh frequency from hourly to whatever you prefer using the console.
 - **Interactive CLI Console**: Manage game windows, force store refreshes, toggle platinum purchasing, list running processes, and analyze save file health directly from the terminal.
@@ -26,7 +28,9 @@ A fully-featured, standalone offline player wrapper and mock server emulator for
 - **Local Assets**: Keep the directory structure intact so the server can locate `flashplayer.exe`, `ruffle.exe`, and Ruffle WebAssembly assets.
 
 ### Quick Start
-1. **Download & Extract**: Download the latest release ZIP from the [Releases](https://github.com/DoctorQwack/Obliterate-Everything-3-Offline/releases) page and extract it to a folder of your choice.
+1. **Download & Extract**: Download the latest release ZIP from the [Releases](https://github.com/DoctorQwack/Obliterate-Everything-3-Offline/releases) page and extract it.
+   - **`OE3_Offline_Release.zip`** (Standard version): Clean, lightweight (under 30MB) package for offline gameplay.
+   - **`OE3_Offline_Release_Legacy_Saves_Included.zip`** (Legacy Save version): Includes the Save Converter, search index, and the raw online database files for users migrating online profiles.
 2. **Launch the Game**: Double-click **`Launch OE3 Offline.bat`** (located in the extracted folder).
 3. **Select Player Mode**: Choose your preferred graphics/engine launch option (Standalone Flash Player is highly recommended for best performance). You can choose `y` to remember this choice for future runs.
 4. **Log In**: 
@@ -36,6 +40,23 @@ A fully-featured, standalone offline player wrapper and mock server emulator for
 
 > [!TIP]
 > To log out or switch user profiles, click the red **LOGOUT** button in the top-right corner of the screen in-game, or type `logout` in the server terminal window.
+
+---
+
+## Legacy Save Converter & Online Migration
+
+If you played the original online version on Kongregate, you can restore your progress using the built-in save conversion pipeline:
+
+1. **Open the Converter**: Click the **Save Converter** link in the top-right corner of the launcher web page, choose Option `[5] Web Save Converter` when booting the launcher, or type `converter` in the server console.
+2. **Search Your Account**: You can search by your readable Kongregate username (callsign) or your numeric user ID. The pre-bundled index contains all **107,744** online accounts.
+3. **Import to Launcher**:
+   - Select your profile and click **Convert Save**.
+   - Review your profile stats, inventory grid, and equipped items in the preview dashboard.
+   - Click the **Import to Launcher** button to automatically copy the converted JSON profile to the active `saves/` folder on your disk.
+   - Alternatively, click **Download Save File** to download the `save_[Username].json` file to share or distribute.
+4. **Log In Case-Insensitively**: Close the converter, return to the game login page, and log in typing your readable username (case-insensitively). The launcher resolves the save path and preserves your original name casing in-game!
+
+*Note: If using the Standard release version, you must copy your legacy database backup JSON (`oe3_PlayerObjects_Default_*.json`) inside a folder named `Legacy Save Files` next to the launcher bat script for conversion to run.*
 
 ---
 
@@ -55,6 +76,7 @@ To input commands, click on the running server terminal window and press **ANY K
 | **`plat`** / **`platt`** | `plat <on/off>` | Enables or disables the in-game platinum purchasing buttons. |
 | **`saves`** | `saves` | Opens the local `saves/` directory in Windows Explorer. |
 | **`check-saves`** | `check-saves` | Scans all user save files on disk and checks them for structural integrity. |
+| **`converter`** | `converter` | Opens the legacy save converter web interface in your default browser. |
 | **`logs`** | `logs` | Outputs the last 20 log entries from the server. |
 | **`config`** | `config` | Displays current active launcher configuration parameters. |
 | **`diagnostics`** | `diagnostics` | Runs a system health check verifying port bindings and folder assets. |
@@ -66,7 +88,7 @@ To input commands, click on the running server terminal window and press **ANY K
 
 Your choices are saved in **`config.json`** inside the folder. Missing config keys are automatically populated with standard defaults on boot.
 
-- **`launch_mode`**: `"ask"` (always prompt), `"flashplayer"`, `"ruffle"`, `"browser"`, or `"auto"` (fallback list).
+- **`launch_mode`**: `"ask"` (always prompt), `"flashplayer"`, `"ruffle"`, `"browser"`, `"converter"`, or `"auto"` (fallback list).
 - **`remember_mode`**: `true` or `false` (skips start menu if launch mode is remembered).
 - **`ruffle_backend`**: Graphics API backend for Ruffle Desktop (`"dx12"`, `"vulkan"`, `"dx11"`, `"gl"`, or `"default"`).
 - **`default_quality`**: Graphics quality setting (`"high"`, `"medium"`, `"low"`).
