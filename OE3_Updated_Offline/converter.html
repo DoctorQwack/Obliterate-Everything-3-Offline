@@ -717,6 +717,14 @@
                         <div style="font-size: 0.82rem; color: #777; text-transform: uppercase; letter-spacing: 0.5px;">Max Inventory Size</div>
                         <div style="color: var(--text-white); font-weight: 600; font-size: 1.1rem; margin-top: 2px;" id="val-max-inv">-</div>
                     </div>
+                    <div>
+                        <div style="font-size: 0.82rem; color: #777; text-transform: uppercase; letter-spacing: 0.5px;">Created Date</div>
+                        <div style="color: var(--text-white); font-weight: 600; font-size: 1.1rem; margin-top: 2px;" id="val-created-date">-</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.82rem; color: #777; text-transform: uppercase; letter-spacing: 0.5px;">Last Login / Save</div>
+                        <div style="color: var(--text-white); font-weight: 600; font-size: 1.1rem; margin-top: 2px;" id="val-last-login">-</div>
+                    </div>
                 </div>
             </div>
 
@@ -1297,6 +1305,8 @@
                 document.getElementById('val-danger-class').textContent = data.dangerClass || 0;
                 document.getElementById('val-password').textContent = data.password || '(None)';
                 document.getElementById('val-max-inv').textContent = data.maxinventory || 50;
+                document.getElementById('val-created-date').textContent = data.starttime || '(Unknown)';
+                document.getElementById('val-last-login').textContent = data.lasttime ? new Date(data.lasttime).toLocaleString() : '(Unknown)';
 
                 // Equipped gear tab
                 populateEquippedGear(data);

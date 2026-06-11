@@ -170,7 +170,8 @@ def convert_to_new_format(legacy_user):
         "campaignseed": int(legacy_user.get("campaignseed", 0)),
         "campaignstart": int(legacy_user.get("campaignstart", -1)),
         "lastbonus": 0,
-        "platinum": int(legacy_user.get("platinum", 30))
+        "platinum": int(legacy_user.get("platinum", 30)),
+        "starttime": legacy_user.get("starttime", "")
     }
     
     new_user["lasttime"] = parse_date_to_ms(legacy_user.get("lasttime"))
@@ -341,6 +342,17 @@ def main():
             print(f"Save file created at: {Colors.CYAN}{output_file}{Colors.ENDC}")
             print(f"\nSummary of converted profile:")
             print(f"  - Callsign:     {new_user['callsign']}")
+            print(f"  - Created:      {new_user.get('starttime') or '(Unknown)'}")
+            
+            # Format last login/save date nicely
+            lasttime_str = "(Unknown)"
+            if new_user.get("lasttime"):
+                try:
+                    lasttime_dt = datetime.fromtimestamp(new_user["lasttime"] / 1000.0)
+                    lasttime_str = lasttime_dt.strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    pass
+            print(f"  - Last Login:   {lasttime_str}")
             print(f"  - Credits:      {new_user['credits']:,}")
             print(f"  - Platinum:     {new_user['platinum']}")
             print(f"  - Rating:       {new_user['rating']}")
