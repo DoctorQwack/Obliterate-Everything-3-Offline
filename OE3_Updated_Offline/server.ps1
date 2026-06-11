@@ -44,6 +44,263 @@ function Log-Message($msg, $color = "Gray") {
     } catch {}
 }
 
+# Compiled C# database reader helper for high-performance skips/reads
+try {
+    $csharpCode = @"
+using System;
+using System.IO;
+using System.Collections.Generic;
+
+public class DbParser {
+    public static List<string> ReadUserBlock(string path, int lineNum) {
+        List<string> lines = new List<string>();
+        using (StreamReader reader = new StreamReader(path)) {
+            for (int i = 1; i < lineNum; i++) {
+                reader.ReadLine();
+            }
+            string line;
+            while ((line = reader.ReadLine()) != null) {
+                lines.Add(line);
+                string trimmed = line.Trim();
+                if (trimmed.EndsWith("}") || trimmed.EndsWith("},")) {
+                    if (line.StartsWith("\t}") || line.StartsWith("}")) {
+                        break;
+                    }
+                }
+            }
+        }
+        return lines;
+    }
+}
+"@
+    Add-Type -TypeDefinition $csharpCode -ErrorAction SilentlyContinue
+} catch {}
+
+function Parse-DateToMs($dateVal) {
+    if (-not $dateVal) {
+        return [System.DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    }
+    if ($dateVal -is [int] -or $dateVal -is [long] -or $dateVal -is [double]) {
+        return [long]$dateVal
+    }
+    $parsedDate = $null
+    $formats = @("yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd")
+    foreach ($fmt in $formats) {
+        try {
+            $parsedDate = [DateTime]::ParseExact($dateVal, $fmt, [System.Globalization.CultureInfo]::InvariantCulture)
+            $dto = New-Object System.DateTimeOffset($parsedDate)
+            return $dto.ToUnixTimeMilliseconds()
+        } catch {}
+    }
+    return [System.DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+}
+
+function Convert-DictToList($dataDict, $size, $defaultVal) {
+    $result = [System.Collections.Generic.List[object]]::new()
+    
+    $isDict = $false
+    if ($null -ne $dataDict) {
+        if ($dataDict -is [System.Collections.IDictionary]) {
+            $isDict = $true
+        } else {
+            $props = $dataDict.PSObject.Properties | Select-Object -ExpandProperty Name
+            if ($props -contains "0") {
+                $isDict = $true
+            }
+        }
+    }
+
+    if ($isDict) {
+        for ($idx = 0; $idx -lt $size; $idx++) {
+            $strIdx = $idx.ToString()
+            if ($null -ne $dataDict.$strIdx) {
+                $val = $dataDict.$strIdx
+                
+                $isInnerDict = $false
+                if ($val -is [System.Collections.IDictionary]) {
+                    $isInnerDict = $true
+                } elseif ($null -ne $val -and $val.PSObject -ne $null) {
+                    $valProps = $val.PSObject.Properties | Select-Object -ExpandProperty Name
+                    if ($valProps -contains "0") { $isInnerDict = $true }
+                }
+
+                if ($isInnerDict) {
+                    $innerList = @(
+                        [int]$(if ($null -ne $val."0") { $val."0" } else { -1 }),
+                        [int]$(if ($null -ne $val."1") { $val."1" } else { -1 }),
+                        [int]$(if ($null -ne $val."2") { $val."2" } else { -1 }),
+                        [int]$(if ($null -ne $val."3") { $val."3" } else { -1 })
+                    )
+                    $result.Add($innerList)
+                } else {
+                    $result.Add([int]$val)
+                }
+            } else {
+                $result.Add($defaultVal)
+            }
+        }
+    } elseif ($dataDict -is [System.Collections.IList] -or $dataDict -is [array]) {
+        for ($idx = 0; $idx -lt $size; $idx++) {
+            if ($idx -lt $dataDict.Count) {
+                $val = $dataDict[$idx]
+                if ($val -is [System.Collections.IList] -or $val -is [array]) {
+                    $arr = [System.Collections.Generic.List[int]]::new()
+                    for ($i = 0; $i -lt 4; $i++) {
+                        if ($i -lt $val.Count) { $arr.Add([int]$val[$i]) } else { $arr.Add(-1) }
+                    }
+                    $result.Add($arr.ToArray())
+                } else {
+                    $isInnerDict = $false
+                    if ($val -is [System.Collections.IDictionary]) {
+                        $isInnerDict = $true
+                    } elseif ($null -ne $val -and $val.PSObject -ne $null) {
+                        $valProps = $val.PSObject.Properties | Select-Object -ExpandProperty Name
+                        if ($valProps -contains "0") { $isInnerDict = $true }
+                    }
+
+                    if ($isInnerDict) {
+                        $innerList = @(
+                            [int]$(if ($null -ne $val."0") { $val."0" } else { -1 }),
+                            [int]$(if ($null -ne $val."1") { $val."1" } else { -1 }),
+                            [int]$(if ($null -ne $val."2") { $val."2" } else { -1 }),
+                            [int]$(if ($null -ne $val."3") { $val."3" } else { -1 })
+                        )
+                        $result.Add($innerList)
+                    } else {
+                        $result.Add([int]$val)
+                    }
+                }
+            } else {
+                $result.Add($defaultVal)
+            }
+        }
+    } else {
+        for ($idx = 0; $idx -lt $size; $idx++) {
+            $result.Add($defaultVal)
+        }
+    }
+    return $result.ToArray()
+}
+
+function Convert-LegacySave($user, $lineNum) {
+    # Find database file
+    $legacyDirs = @(
+        (Join-Path $dir "Legacy Save Files"),
+        (Join-Path (Split-Path $dir -Parent) "Legacy Save Files"),
+        $dir
+    )
+    $dbPath = $null
+    foreach ($d in $legacyDirs) {
+        if (Test-Path $d) {
+            $files = Get-ChildItem -Path $d -Filter "*.json" | Where-Object { $_.Name -like "*PlayerObjects*" }
+            if ($files) {
+                $dbPath = $files[0].FullName
+                break
+            }
+        }
+    }
+
+    if ($null -eq $dbPath) {
+        throw "No legacy database JSON file found in 'Legacy Save Files' folder."
+    }
+
+    # Execute C# block parser helper
+    $userLines = [DbParser]::ReadUserBlock($dbPath, $lineNum)
+    if ($userLines.Count -eq 0) {
+        throw "Could not extract user data block from database at line $lineNum."
+    }
+
+    $fullStr = [string]::Join("`n", $userLines).TrimEnd()
+    if ($fullStr.EndsWith(",")) {
+        $fullStr = $fullStr.Substring(0, $fullStr.Length - 1)
+    }
+
+    $wrapper = "{" + $fullStr + "}"
+    $userDataObj = $null
+    try {
+        $userDataObj = ConvertFrom-Json $wrapper
+    } catch {
+        throw "Failed to parse extracted JSON: $_"
+    }
+
+    $keys = @($userDataObj.PSObject.Properties | Where-Object { $_.MemberType -eq 'NoteProperty' } | Select-Object -ExpandProperty Name)
+    if ($keys.Count -eq 0) {
+        throw "Extracted JSON is empty or invalid."
+    }
+    $legacyUser = $userDataObj.$($keys[0])
+
+    # Perform conversion logic
+    $username = if ($null -ne $legacyUser.username) { $legacyUser.username } else { "GuestPlayer" }
+    $maxInv = if ($null -ne $legacyUser.maxinventory) { [int]$legacyUser.maxinventory } else { 50 }
+
+    $dangerClass = 0
+    if ($null -ne $legacyUser.class) {
+        $dangerClass = [int]$legacyUser.class
+    } elseif ($null -ne $legacyUser.dangerClass) {
+        $dangerClass = [int]$legacyUser.dangerClass
+    }
+
+    $newUser = [ordered]@{
+        username = $username
+        callsign = if ($null -ne $legacyUser.callsign) { $legacyUser.callsign } else { $username }
+        password = if ($null -ne $legacyUser.password) { $legacyUser.password } else { "" }
+        credits = if ($null -ne $legacyUser.credits) { [int]$legacyUser.credits } else { 500 }
+        stations = if ($null -ne $legacyUser.stations) { [int]$legacyUser.stations } else { 7 }
+        maxinventory = $maxInv
+        wins = if ($null -ne $legacyUser.wins) { [int]$legacyUser.wins } else { 0 }
+        losses = if ($null -ne $legacyUser.losses) { [int]$legacyUser.losses } else { 0 }
+        rating = if ($null -ne $legacyUser.rating) { [int]$legacyUser.rating } else { 1000 }
+        classlock = if ($null -ne $legacyUser.classlock) { [int]$legacyUser.classlock } else { 0 }
+        dangerClass = $dangerClass
+        campaignseed = if ($null -ne $legacyUser.campaignseed) { [int]$legacyUser.campaignseed } else { 0 }
+        campaignstart = if ($null -ne $legacyUser.campaignstart) { [int]$legacyUser.campaignstart } else { -1 }
+        lastbonus = 0
+        platinum = if ($null -ne $legacyUser.platinum) { [int]$legacyUser.platinum } else { 30 }
+        starttime = if ($null -ne $legacyUser.starttime) { $legacyUser.starttime } else { "" }
+    }
+
+    $newUser["lasttime"] = Parse-DateToMs($legacyUser.lasttime)
+    $newUser["laststations"] = Parse-DateToMs($legacyUser.laststations)
+
+    $newUser["armory"] = Convert-DictToList $legacyUser.armory $maxInv @(-1, -1, -1, -1)
+    $newUser["equip"] = Convert-DictToList $legacyUser.equip 21 -1
+    $newUser["campaign"] = Convert-DictToList $legacyUser.campaign 36 0
+    $newUser["prizes"] = Convert-DictToList $legacyUser.prizes 36 @(-1, -1, -1, -1)
+
+    # Save files
+    $savesDir = Join-Path $dir "saves"
+    if (-not (Test-Path $savesDir)) {
+        New-Item -ItemType Directory -Path $savesDir | Out-Null
+    }
+
+    $safeUsername = $username -replace '[^a-zA-Z0-9_\-]', ''
+    if (-not $safeUsername) { $safeUsername = "GuestPlayer" }
+
+    $outputFile = Join-Path $savesDir "save_$safeUsername.json"
+    $newUserJson = ConvertTo-Json -InputObject $newUser -Depth 5
+    [System.IO.File]::WriteAllText($outputFile, $newUserJson, [System.Text.Encoding]::UTF8)
+
+    # Secondary file for callsign if it differs
+    $callsign = $newUser["callsign"]
+    if ($null -ne $callsign) {
+        $safeCallsign = $callsign -replace '[^a-zA-Z0-9_\-]', ''
+        if ($safeCallsign -and $safeCallsign.ToLower() -ne $safeUsername.ToLower()) {
+            $callsignUser = [ordered]@{
+                username = $callsign
+                callsign = $callsign
+            }
+            foreach ($k in $newUser.Keys) {
+                if ($k -ne "username" -and $k -ne "callsign") {
+                    $callsignUser[$k] = $newUser[$k]
+                }
+            }
+            $callsignFile = Join-Path $savesDir "save_$safeCallsign.json"
+            $callsignJson = ConvertTo-Json -InputObject $callsignUser -Depth 5
+            [System.IO.File]::WriteAllText($callsignFile, $callsignJson, [System.Text.Encoding]::UTF8)
+        }
+    }
+}
+
 # Clear old log file at startup
 try {
     $logFile = [System.IO.Path]::Combine($dir, "log.txt")
@@ -797,31 +1054,18 @@ while ($l.IsListening) {
             if ($p -eq 'legacy/convert' -and $req.HttpMethod -eq 'GET') {
                 $user = $req.QueryString["user"]
                 $line = $req.QueryString["line"]
-                Log-Message "Converting legacy save for: $user (Line $line)..." "Cyan"
-                
-                $psi = New-Object System.Diagnostics.ProcessStartInfo
-                $psi.FileName = "python"
-                $psi.Arguments = "convert_save.py --user `"$user`" --line $line"
-                $psi.WorkingDirectory = $dir
-                $psi.RedirectStandardOutput = $true
-                $psi.RedirectStandardError = $true
-                $psi.UseShellExecute = $false
-                $psi.CreateNoWindow = $true
-                
-                $proc = [System.Diagnostics.Process]::Start($psi)
-                $stdout = $proc.StandardOutput.ReadToEnd()
-                $stderr = $proc.StandardError.ReadToEnd()
-                $proc.WaitForExit()
+                Log-Message "Converting legacy save for: $user (Line $line) natively..." "Cyan"
                 
                 $res.StatusCode = 200
                 $res.ContentType = "application/json"
                 $writer = New-Object System.IO.StreamWriter($res.OutputStream)
-                
-                if ($proc.ExitCode -eq 0 -and $stdout -like "*Conversion successful*") {
+
+                try {
+                    Convert-LegacySave -user $user -lineNum $line
                     $writer.Write('{"status":"ok"}')
                     Log-Message "Conversion successful for legacy user: $user" "Green"
-                } else {
-                    $errorMsg = if ($stderr) { $stderr.Trim() } else { $stdout.Trim() }
+                } catch {
+                    $errorMsg = $_.ToString().Trim()
                     $escapedError = $errorMsg -replace '"','\"' -replace "`r","" -replace "`n","\n"
                     $writer.Write("{\`"status\`":\`"error\`",\`"message\`":\`"$escapedError\`"}")
                     Log-Message "Conversion failed for legacy user $user : $errorMsg" "Red"
