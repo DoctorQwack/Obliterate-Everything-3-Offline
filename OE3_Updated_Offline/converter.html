@@ -759,9 +759,16 @@
             </div>
 
             <!-- Footer -->
-            <div class="modal-footer">
-                <button class="btn btn-success" id="btn-download-save">Download Save File</button>
-                <button class="btn btn-page" id="btn-close-modal-footer">Close</button>
+            <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div style="font-size: 0.9rem; color: var(--success-color); font-weight: 600; display: flex; align-items: center; gap: 6px;" id="modal-import-status">
+                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success-color); box-shadow: 0 0 8px var(--success-color);"></span>
+                    Auto-Imported
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button class="btn" id="btn-import-save" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)); color: var(--bg-color); font-weight: 700; box-shadow: 0 4px 15px var(--accent-glow);">Import to Launcher</button>
+                    <button class="btn btn-success" id="btn-download-save">Download Save File</button>
+                    <button class="btn btn-page" id="btn-close-modal-footer">Close</button>
+                </div>
             </div>
         </div>
     </div>
@@ -818,6 +825,7 @@
         let pollTimer = null;
         let currentSaveData = null;
         let currentSaveUsername = '';
+        let currentSaveLine = -1;
 
         // Complete OE3 Item Database Name Mapping
         const itemNames = {
@@ -1216,7 +1224,7 @@
             
             if (btn.classList.contains('btn-view-save')) {
                 // Save is already converted, just preview it!
-                previewSave(username, userSafe, false);
+                previewSave(username, userSafe, false, lineNum);
                 return;
             }
 
@@ -1238,7 +1246,7 @@
                     btn.disabled = false;
 
                     // Automatically preview the save and show success banner
-                    previewSave(username, userSafe, true);
+                    previewSave(username, userSafe, true, lineNum);
                 } else {
                     showToast(`Error: ${data.message || 'failed to convert'}`, 'error');
                     btn.disabled = false;
@@ -1252,7 +1260,7 @@
         }
 
         // Preview Converted Save in Dashboard Modal
-        async function previewSave(username, userSafe, showBanner = false) {
+        async function previewSave(username, userSafe, showBanner = false, lineNum = -1) {
             try {
                 const res = await fetch(`/saves/save_${userSafe}.json`);
                 if (res.status !== 200) {
@@ -1261,6 +1269,7 @@
                 }
                 const data = await res.json();
                 currentSaveData = data;
+                currentSaveLine = lineNum;
                 
                 // Use callsign as download name if present, fallback to username (ID)
                 const callsign = data.callsign || username;
@@ -1498,6 +1507,51 @@
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             showToast('Save file download initiated!', 'success');
+        });
+
+        // Import save file to local launcher saves folder
+        document.getElementById('btn-import-save').addEventListener('click', async () => {
+            if (!currentSaveData) return;
+            const btn = document.getElementById('btn-import-save');
+            const statusEl = document.getElementById('modal-import-status');
+            
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner" style="width:14px; height:14px; border-width:2px; margin-right:4px; border-left-color:var(--bg-color);"></span>Importing...`;
+            
+            try {
+                // Re-trigger the conversion request on the server to ensure file is placed
+                const url = `/legacy/convert?user=${encodeURIComponent(currentSaveUsername)}&line=${currentSaveLine}`;
+                const res = await fetch(url, { method: 'GET' });
+                const data = await res.json();
+                
+                if (data.status === 'ok') {
+                    showToast(`Successfully imported profile "${currentSaveUsername}" to saves!`, 'success');
+                    btn.innerHTML = `Imported!`;
+                    btn.style.background = 'linear-gradient(135deg, var(--success-color), #0f9f90)';
+                    btn.style.color = '#fff';
+                    
+                    statusEl.innerHTML = `
+                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--success-color); box-shadow: 0 0 8px var(--success-color);"></span>
+                        Active &amp; Imported
+                    `;
+                    
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        btn.style.background = '';
+                        btn.style.color = '';
+                    }, 3000);
+                } else {
+                    showToast(`Import Error: ${data.message || 'failed'}`, 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            } catch (err) {
+                showToast('Server connection failed', 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
         });
 
         // Live Search Handler
