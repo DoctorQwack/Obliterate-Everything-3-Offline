@@ -18,3 +18,11 @@ saves/
 # Node / Electron build folders (if any)
 node_modules/
 dist/
+
+# Python cache, logs, status, and raw database
+__pycache__/
+*.pyc
+log.txt
+OE3_Updated_Offline/log.txt
+OE3_Updated_Offline/index_status.json
+Legacy Save Files/

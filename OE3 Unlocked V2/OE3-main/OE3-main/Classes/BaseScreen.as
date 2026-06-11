@@ -419,8 +419,8 @@ package
 			logoutTxt.mouseEnabled = false;
 			logoutBtn.addChild(logoutTxt);
 			
-			logoutBtn.x = profilescreen.x + 40;
-			logoutBtn.y = profilescreen.y + 60; // sits below profilescreen
+			logoutBtn.x = 5;
+			logoutBtn.y = knobhelp.y + (0.5 * knobhelp.height) + 10;
 			addChild(logoutBtn);
 			
 			logoutBtn.addEventListener(MouseEvent.MOUSE_OVER, function(e:MouseEvent):void {

@@ -2,52 +2,6 @@
 title Update Offline SWF
 cd /d "%~dp0"
 
-echo Checking for compiled SWF files...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$dir = Get-Location; $srcDir = Join-Path $dir 'OE3-main\OE3-main'; if (-not (Test-Path $srcDir)) { $srcDir = Join-Path $dir '..\OE3-main\OE3-main' }; $targetA = Join-Path $dir 'OE3_Offline'; $targetB = Join-Path $dir '..\OE3_Updated_Offline'; $f1 = Join-Path $srcDir 'OE3.swf'; $f2 = Join-Path $srcDir 'OE3_UPDATED.swf'; $sourceFile = $null; if (Test-Path $f1) { if (Test-Path $f2) { $t1 = (Get-Item $f1).LastWriteTime; $t2 = (Get-Item $f2).LastWriteTime; if ($t1 -gt $t2) { $sourceFile = $f1 } else { $sourceFile = $f2 } } else { $sourceFile = $f1 } } elseif (Test-Path $f2) { $sourceFile = $f2 }; if ($null -eq $sourceFile) { Write-Host 'ERROR: Could not find compiled SWF file (OE3.swf or OE3_UPDATED.swf) in source directory!' -ForegroundColor Red; Write-Host 'Please open OE3.fla in Adobe Flash/Animate and compile/publish it first.' -ForegroundColor Yellow; exit 1 }; Write-Host ('Found compiled SWF: ' + (Split-Path $sourceFile -Leaf)) -ForegroundColor Green; if (Test-Path $targetA) { Write-Host ('Copying to ' + $targetA + '...') -ForegroundColor Gray; Copy-Item -Path $sourceFile -Destination (Join-Path $targetA 'OE3_UPDATED.swf') -Force }; if (Test-Path $targetB) { Write-Host ('Copying to ' + $targetB + '...') -ForegroundColor Gray; Copy-Item -Path $sourceFile -Destination (Join-Path $targetB 'OE3_UPDATED.swf') -Force }; Write-Host 'SUCCESS: SWF files updated successfully.' -ForegroundColor Green; Write-Host 'You can now run Launch OE3 Offline.bat inside your player folder to play!' -ForegroundColor Green"
 
-set "SOURCE_DIR=%~dp0OE3-main\OE3-main"
-set "TARGET_A=%~dp0OE3_Offline"
-set "TARGET_B=%~dp0..\OE3_Updated_Offline"
-
-if not exist "%SOURCE_DIR%" (
-    set "SOURCE_DIR=%~dp0..\OE3-main\OE3-main"
-)
-
-if exist "%SOURCE_DIR%\OE3_UPDATED.swf" (
-    echo Found compiled OE3_UPDATED.swf.
-    if exist "%TARGET_A%" (
-        echo Copying to "%TARGET_A%"...
-        copy /y "%SOURCE_DIR%\OE3_UPDATED.swf" "%TARGET_A%\OE3_UPDATED.swf"
-    )
-    if exist "%TARGET_B%" (
-        echo Copying to "%TARGET_B%"...
-        copy /y "%SOURCE_DIR%\OE3_UPDATED.swf" "%TARGET_B%\OE3_UPDATED.swf"
-    )
-    goto success
-)
-
-if exist "%SOURCE_DIR%\OE3.swf" (
-    echo Found compiled OE3.swf.
-    if exist "%TARGET_A%" (
-        echo Copying and renaming to "%TARGET_A%\OE3_UPDATED.swf"...
-        copy /y "%SOURCE_DIR%\OE3.swf" "%TARGET_A%\OE3_UPDATED.swf"
-    )
-    if exist "%TARGET_B%" (
-        echo Copying and renaming to "%TARGET_B%\OE3_UPDATED.swf"...
-        copy /y "%SOURCE_DIR%\OE3.swf" "%TARGET_B%\OE3_UPDATED.swf"
-    )
-    goto success
-)
-
-echo.
-echo ERROR: Could not find compiled SWF file in source directory!
-echo Please open OE3.fla in Adobe Flash/Animate and compile/publish it first.
-echo.
-pause
-exit /b 1
-
-:success
-echo.
-echo SUCCESS: SWF files updated successfully.
-echo You can now run "Launch OE3 Offline.bat" inside your player folder to play!
-echo.
 pause

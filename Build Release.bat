@@ -1,5 +1,5 @@
 @echo off
-title Build OE3 Offline Release Zip
+title Build OE3 Offline Release Zips
 cd /d "%~dp0"
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_release.ps1"

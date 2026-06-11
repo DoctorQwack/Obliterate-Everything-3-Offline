@@ -205,7 +205,8 @@
             <option value="low">Low Quality (Max FPS)</option>
           </select>
         </div>
-        <a href="/log.txt" target="_blank" class="btn-diag">View Logs</a>
+        <a href="/converter.html" id="btn-converter-link" class="btn-diag" style="border-color:#8f94fb;color:#8f94fb;text-decoration:none;display:none;">Save Converter</a>
+        <a href="/log.txt" target="_blank" class="btn-diag" style="text-decoration:none;">View Logs</a>
         <button id="fullscreen-btn" class="btn-diag">Fullscreen</button>
       </div>
     </div>
@@ -335,9 +336,17 @@
       }).catch((err) => {
         console.error("Failed to load SWF:", err);
         statusEl.textContent = "Error loading SWF. Check console.";
-        statusEl.style.color = "#ff5555";
       });
     }
+
+    // Check if converter.html exists dynamically to hide/show link
+    fetch('/converter.html', { method: 'HEAD' })
+      .then(res => {
+        if (res.status === 200) {
+          const btn = document.getElementById('btn-converter-link');
+          if (btn) btn.style.display = 'inline-flex';
+        }
+      }).catch(() => {});
   </script>
 </body>
 </html>

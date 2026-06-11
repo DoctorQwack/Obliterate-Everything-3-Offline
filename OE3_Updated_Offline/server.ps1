@@ -208,22 +208,23 @@ if ($config.remember_mode -and $launchMode -ne "ask") {
     $flashStatus = if ($hasFlash) { "Available - Recommended" } else { "NOT FOUND" }
     $ruffleStatus = if ($hasRuffle) { "Available" } else { "NOT FOUND" }
     
-    Log-Message "=========================================" "Cyan"
-    Log-Message "         SELECT LAUNCH MODE             " "Cyan"
-    Log-Message "=========================================" "Cyan"
-    Log-Message " [1] Standalone Flash Player ($flashStatus)" "Green"
-    Log-Message " [2] Ruffle Desktop Player ($ruffleStatus)" "Yellow"
-    Log-Message " [3] Web Browser (Always Available)" "Yellow"
-    Log-Message " [4] Auto-Detect (Dynamic Fallback)" "Gray"
-    Log-Message "=========================================" "Cyan"
-    
-    $choice = Read-Host " Enter choice (1-4, Default is 1)"
+    $hasConverter = Test-Path (Join-Path $dir "converter.html")
+    if ($hasConverter) {
+        Log-Message " [5] Web Save Converter" "Cyan"
+        Log-Message "=========================================" "Cyan"
+        $choice = Read-Host " Enter choice (1-5, Default is 1)"
+    } else {
+        Log-Message "=========================================" "Cyan"
+        $choice = Read-Host " Enter choice (1-4, Default is 1)"
+    }
     if ($choice -eq "2") {
         $launchMode = "ruffle"
     } elseif ($choice -eq "3") {
         $launchMode = "browser"
     } elseif ($choice -eq "4") {
         $launchMode = "auto"
+    } elseif ($choice -eq "5" -and $hasConverter) {
+        $launchMode = "converter"
     } else {
         $launchMode = "flashplayer"
     }
@@ -255,6 +256,16 @@ function Start-GameInstance {
     $mode = $script:config.launch_mode
     $flashplayerExe = [System.IO.Path]::Combine($script:dir, "flashplayer.exe")
     $ruffleExe = [System.IO.Path]::Combine($script:dir, "ruffle.exe")
+    
+    if ($mode -eq "converter") {
+        try {
+            Log-Message "Opening Web Save Converter in default browser..." "Green"
+            Start-Process "http://127.0.0.1:$script:port/converter.html"
+        } catch {
+            Log-Message "Could not open browser. Please open http://127.0.0.1:$script:port/converter.html manually." "Yellow"
+        }
+        return $null
+    }
     
     if ($mode -eq "ask" -or $mode -eq "auto") {
         if ([System.IO.File]::Exists($flashplayerExe)) {
@@ -383,6 +394,7 @@ function Execute-ConsoleCommand($inputStr) {
             Write-Host "  refresh-store        Force immediate shop items and vault clock refresh"
             Write-Host "  saves                Open the saves folder in Windows Explorer"
             Write-Host "  check-saves          Perform diagnostic integrity scan on all user saves"
+            Write-Host "  converter            Open the Web legacy save converter in your browser"
             Write-Host "  diagnostics          Run server health diagnostics check"
             Write-Host "  shutdown             Stop server and exit launcher terminal"
         }
@@ -456,10 +468,10 @@ function Execute-ConsoleCommand($inputStr) {
         }
         "mode" {
             if ($parts.Count -lt 2) {
-                Write-Host "Usage: mode [ask|flashplayer|ruffle|browser|auto]" -ForegroundColor Yellow
+                Write-Host "Usage: mode [ask|flashplayer|ruffle|browser|auto|converter]" -ForegroundColor Yellow
             } else {
                 $newMode = $parts[1].ToLower()
-                if ($newMode -in @("ask", "flashplayer", "ruffle", "browser", "auto")) {
+                if ($newMode -in @("ask", "flashplayer", "ruffle", "browser", "auto", "converter")) {
                     $script:config.launch_mode = $newMode
                     if ($newMode -eq "ask") {
                         $script:config.remember_mode = $false
@@ -467,7 +479,7 @@ function Execute-ConsoleCommand($inputStr) {
                     Save-Config
                     Write-Host "Launch mode set to '$newMode'." -ForegroundColor Green
                 } else {
-                    Write-Host "Invalid mode: '$newMode'. Select from: ask, flashplayer, ruffle, browser, auto" -ForegroundColor Red
+                    Write-Host "Invalid mode: '$newMode'. Select from: ask, flashplayer, ruffle, browser, auto, converter" -ForegroundColor Red
                 }
             }
         }
@@ -567,6 +579,14 @@ function Execute-ConsoleCommand($inputStr) {
                 Write-Host "Opened saves directory." -ForegroundColor Green
             } else {
                 Write-Host "Saves directory not found." -ForegroundColor Yellow
+            }
+        }
+        "converter" {
+            if (Test-Path (Join-Path $script:dir "converter.html")) {
+                Start-Process "http://127.0.0.1:$script:port/converter.html"
+                Write-Host "Opened Web Legacy Save Converter in browser." -ForegroundColor Green
+            } else {
+                Write-Host "Error: The Web legacy save converter is not included in this release version." -ForegroundColor Red
             }
         }
         "check-saves" {
@@ -718,6 +738,17 @@ while ($l.IsListening) {
                     $saveFile = Join-Path $dir "save_$user_safe.json"
                 }
                 
+                # Explicit case-insensitive resolution if file is not found (useful for cross-platform/case-sensitive setups)
+                if (-not (Test-Path $saveFile)) {
+                    $savesDir = Join-Path $dir "saves"
+                    if (Test-Path $savesDir) {
+                        $matchedFile = Get-ChildItem -Path $savesDir -Filter "save_*.json" -File | Where-Object { $_.BaseName -ieq "save_$user_safe" } | Select-Object -First 1
+                        if ($matchedFile) {
+                            $saveFile = $matchedFile.FullName
+                        }
+                    }
+                }
+                
                 if (Test-Path $saveFile -PathType Leaf) {
                     $body = [System.IO.File]::ReadAllText($saveFile)
                     $res.StatusCode = 200
@@ -746,6 +777,59 @@ while ($l.IsListening) {
                 $res.Close()
                 continue
             }
+            if ($p -eq 'legacy/generate_index' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    if (Test-Path (Join-Path $dir "index_status.json")) { Remove-Item (Join-Path $dir "index_status.json") -Force | Out-Null }
+                    if (Test-Path (Join-Path $dir "legacy_index.json")) { Remove-Item (Join-Path $dir "legacy_index.json") -Force | Out-Null }
+                } catch {}
+                
+                Log-Message "Starting background scan of legacy database..." "Cyan"
+                Start-Process -FilePath "python" -ArgumentList "generate_index.py" -WorkingDirectory $dir -NoNewWindow
+                
+                $res.StatusCode = 200
+                $res.ContentType = "application/json"
+                $writer = New-Object System.IO.StreamWriter($res.OutputStream)
+                $writer.Write('{"status":"ok"}')
+                $writer.Close()
+                $res.Close()
+                continue
+            }
+            if ($p -eq 'legacy/convert' -and $req.HttpMethod -eq 'GET') {
+                $user = $req.QueryString["user"]
+                $line = $req.QueryString["line"]
+                Log-Message "Converting legacy save for: $user (Line $line)..." "Cyan"
+                
+                $psi = New-Object System.Diagnostics.ProcessStartInfo
+                $psi.FileName = "python"
+                $psi.Arguments = "convert_save.py --user `"$user`" --line $line"
+                $psi.WorkingDirectory = $dir
+                $psi.RedirectStandardOutput = $true
+                $psi.RedirectStandardError = $true
+                $psi.UseShellExecute = $false
+                $psi.CreateNoWindow = $true
+                
+                $proc = [System.Diagnostics.Process]::Start($psi)
+                $stdout = $proc.StandardOutput.ReadToEnd()
+                $stderr = $proc.StandardError.ReadToEnd()
+                $proc.WaitForExit()
+                
+                $res.StatusCode = 200
+                $res.ContentType = "application/json"
+                $writer = New-Object System.IO.StreamWriter($res.OutputStream)
+                
+                if ($proc.ExitCode -eq 0 -and $stdout -like "*Conversion successful*") {
+                    $writer.Write('{"status":"ok"}')
+                    Log-Message "Conversion successful for legacy user: $user" "Green"
+                } else {
+                    $errorMsg = if ($stderr) { $stderr.Trim() } else { $stdout.Trim() }
+                    $escapedError = $errorMsg -replace '"','\"' -replace "`r","" -replace "`n","\n"
+                    $writer.Write("{\`"status\`":\`"error\`",\`"message\`":\`"$escapedError\`"}")
+                    Log-Message "Conversion failed for legacy user $user : $errorMsg" "Red"
+                }
+                $writer.Close()
+                $res.Close()
+                continue
+            }
 
             if ($p -eq '') { $p = 'index.html' }
             
@@ -767,6 +851,7 @@ while ($l.IsListening) {
                     '.gif'  { 'image/gif' }
                     '.ico'  { 'image/x-icon' }
                     '.txt'  { 'text/plain; charset=utf-8' }
+                    '.json' { 'application/json; charset=utf-8' }
                     default { 'application/octet-stream' }
                 }
                 

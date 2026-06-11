@@ -286,8 +286,12 @@ package playerio {
 					var data:Object = parseJSON(loader.data);
 					if (data && data.username) {
 						_player = data;
-						_player.username = username;
-						_player.callsign = username;
+						if (!_player.username || _player.username.toLowerCase() != username.toLowerCase()) {
+							_player.username = username;
+						}
+						if (!_player.callsign || _player.callsign.toLowerCase() != username.toLowerCase()) {
+							_player.callsign = username;
+						}
 						trace("Loaded user save from file: " + username);
 						logToServer("Loaded user save from file: " + username, "INFO");
 					} else {
