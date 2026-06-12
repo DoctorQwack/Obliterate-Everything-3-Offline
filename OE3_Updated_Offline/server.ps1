@@ -11,6 +11,7 @@ $global:gameInstances = @()
 $global:instanceCount = 0
 $global:cmdBuffer = ""
 $global:inConsoleMode = $false
+$global:version = "v0.4_Beta"
 
 function Save-Config {
     $script:config | ConvertTo-Json | Out-File -FilePath $script:configPath -Force -Encoding utf8
@@ -310,7 +311,7 @@ try {
 } catch {}
 
 Log-Message "=========================================" "Green"
-Log-Message "   OE3 Offline Server Starting...        " "Green"
+Log-Message "   OE3 Offline Server Starting ($global:version)..." "Green"
 Log-Message "   Serving from: $dir" "Cyan"
 Log-Message "=========================================" "Green"
 
