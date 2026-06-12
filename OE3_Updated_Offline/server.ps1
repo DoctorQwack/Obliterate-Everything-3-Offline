@@ -11,7 +11,7 @@ $global:gameInstances = @()
 $global:instanceCount = 0
 $global:cmdBuffer = ""
 $global:inConsoleMode = $false
-$global:version = "v0.5_Beta"
+$global:version = "v0.5.1_Beta"
 
 function Save-Config {
     $script:config | ConvertTo-Json | Out-File -FilePath $script:configPath -Force -Encoding utf8
@@ -1106,13 +1106,17 @@ while ($l.IsListening) {
                 
                 try {
                     $fs.CopyTo($res.OutputStream)
-                    Log-Message "$logStr -> 200 OK ($($fs.Length) bytes, $t)" "Green"
+                    if (-not ($p -like "saves/save_*.json")) {
+                        Log-Message "$logStr -> 200 OK ($($fs.Length) bytes, $t)" "Green"
+                    }
                 } finally {
                     $fs.Close()
                 }
             } else {
                 $res.StatusCode = 404
-                Log-Message "$logStr -> 404 Not Found" "Yellow"
+                if (-not ($p -like "saves/save_*.json")) {
+                    Log-Message "$logStr -> 404 Not Found" "Yellow"
+                }
             }
             
             $res.Close()
