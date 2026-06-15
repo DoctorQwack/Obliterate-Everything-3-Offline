@@ -64,8 +64,8 @@ Once in console mode:
                'config.json' and will be used on future boots.
   Valid Types:
     - ask:          Prompts for launch mode selection on each startup.
-    - flashplayer:  Launches native Flash Player Projector (flashplayer.exe).
-    - ruffle:       Launches native Ruffle Desktop player (ruffle.exe).
+    - flashplayer:  Launches native Flash Player Projector (flashplayer.exe on Windows, ./flashplayer on Linux).
+    - ruffle:       Launches native Ruffle Desktop player (ruffle.exe on Windows, ./ruffle or system ruffle on Linux).
     - browser:      Opens index.html in the default Web Browser.
     - auto:         Automatically detects and uses the best available player.
   Example:     Console> mode flashplayer
@@ -105,7 +105,7 @@ Once in console mode:
   Example:     Console> refresh-store
 
 * saves
-  Description: Opens the local 'saves/' directory in Windows Explorer.
+  Description: Opens the local 'saves/' directory in the system's file manager (explorer/xdg-open/open).
   Example:     Console> saves
 
 * check-saves

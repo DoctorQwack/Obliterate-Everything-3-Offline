@@ -24,10 +24,13 @@ A fully-featured, standalone offline player wrapper and mock server emulator for
 ## Installation & Running Recommendations
 
 ### System Requirements
-- **OS**: Windows (PowerShell 5.1 or higher)
-- **Local Assets**: Keep the directory structure intact so the server can locate `flashplayer.exe`, `ruffle.exe`, and Ruffle WebAssembly assets.
+- **OS**: Windows (PowerShell 5.1 or higher) or Linux (Ubuntu, Fedora, Arch, Mint, etc.)
+- **Dependencies (Linux)**: Python 3.x and standard terminal tools (`curl`, `unzip`, `tar`)
+- **Local Assets**: Keep the directory structure intact so the server can locate required native player or Ruffle WebAssembly assets.
 
 ### Quick Start
+
+#### Windows
 1. **Download & Extract**: Download the latest release ZIP from the [Releases](https://github.com/DoctorQwack/Obliterate-Everything-3-Offline/releases) page and extract it.
    - **`OE3_Offline_Release.zip`** (Standard version): Clean, lightweight (under 30MB) package for offline gameplay.
    - **`OE3_Offline_Release_Legacy_Saves_Included.zip`** (Legacy Save version): Includes the Save Converter, search index, and the raw online database files for users migrating online profiles.
@@ -37,6 +40,18 @@ A fully-featured, standalone offline player wrapper and mock server emulator for
    - Click **Start** once the player loads.
    - Enter any desired username into the text box.
    - Click **Login** (no passwords or signup required).
+
+#### Linux (One-Line Copy-Paste Installer)
+Run this single command in your terminal to automatically install dependencies, download the game, bundle the native Linux Flash Player Projector, and create a desktop launcher grid integration:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/DoctorQwack/Obliterate-Everything-3-Offline/main/install.sh | bash
+```
+
+Once installed, search your applications menu for **Obliterate Everything 3** to launch, or run the launcher script:
+```bash
+cd ~/OE3-Offline && ./launch.sh
+```
 
 > [!TIP]
 > To log out or switch user profiles, click the red **LOGOUT** button in the top-right corner of the screen in-game, or type `logout` in the server terminal window.
