@@ -20,7 +20,7 @@ import shutil
 DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Global states
-VERSION = "v0.6_Beta"
+VERSION = "v0.6.1_Beta"
 port = 8765
 force_vault_refresh = False
 force_logout = False
@@ -317,6 +317,36 @@ class OE3HTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             if not path.startswith("saves/"):
                 log_message(f"Request: GET /{path} -> 404 Not Found", "yellow")
 
+def is_wsl():
+    if sys.platform.startswith('linux'):
+        try:
+            with open('/proc/version', 'r') as f:
+                return 'microsoft' in f.read().lower()
+        except Exception:
+            pass
+    return False
+
+def open_browser_wsl(url):
+    if shutil.which("wslview"):
+        try:
+            subprocess.Popen(["wslview", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except Exception:
+            pass
+    for exe in ["powershell.exe", "cmd.exe", "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", "/mnt/c/Windows/System32/cmd.exe"]:
+        exe_path = shutil.which(exe) or (exe if os.path.exists(exe) else None)
+        if exe_path:
+            try:
+                if "powershell.exe" in exe_path:
+                    subprocess.Popen([exe_path, "-NoProfile", "-Command", f"Start-Process '{url}'"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return True
+                elif "cmd.exe" in exe_path:
+                    subprocess.Popen([exe_path, "/c", f"start \"\" \"{url}\""], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return True
+            except Exception:
+                pass
+    return False
+
 # Choose Launch Mode Prompt Menu
 def choose_launch_mode():
     global config
@@ -376,7 +406,19 @@ def launch_game(mode=None):
             
     is_windows = sys.platform.startswith('win')
     port_str = str(port)
+    is_wsl_env = is_wsl()
     
+    # Check for missing display server on WSL/Linux for GUI modes
+    if mode in ("flashplayer", "ruffle") and not is_windows:
+        has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        if is_wsl_env and not has_display:
+            log_message("[WARNING] Running in WSL without an active X/Wayland server or DISPLAY. Standalone GUI players (Flash/Ruffle) will fail to launch.", "yellow")
+            log_message("To play, please either:", "yellow")
+            log_message("  1. Configure an X server on Windows (like VcXsrv) and set export DISPLAY=127.0.0.1:0.0", "yellow")
+            log_message("  2. Use Web Browser mode [3] which opens the game on your Windows host.", "yellow")
+            log_message("Automatically falling back to Web Browser mode...", "yellow")
+            return launch_game("browser")
+            
     # Executable paths
     flash_exe = os.path.join(DIR, "flashplayer.exe" if is_windows else "flashplayer")
     ruffle_exe = os.path.join(DIR, "ruffle.exe" if is_windows else "ruffle")
@@ -390,7 +432,14 @@ def launch_game(mode=None):
     if mode == "converter":
         url = f"http://127.0.0.1:{port_str}/converter.html"
         log_message(f"Opening Save Converter: {url}", "cyan")
-        webbrowser.open(url)
+        if is_wsl_env and open_browser_wsl(url):
+            log_message("Browser launched successfully via WSL host bridge.", "green")
+        else:
+            try:
+                webbrowser.open(url)
+                log_message("Browser launched successfully.", "green")
+            except Exception as e:
+                log_message(f"Could not open browser automatically: {e}. Please open {url} manually.", "yellow")
         return
         
     elif mode == "flashplayer":
@@ -401,7 +450,10 @@ def launch_game(mode=None):
                 if is_windows:
                     proc = subprocess.Popen([flash_exe, url])
                 else:
-                    proc = subprocess.Popen([flash_exe, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    log_err_path = os.path.join(DIR, "game_error.log")
+                    log_err_file = open(log_err_path, "w", encoding="utf-8")
+                    proc = subprocess.Popen([flash_exe, url], stdout=subprocess.DEVNULL, stderr=log_err_file)
+                    log_err_file.close()
                 log_message("Flash Player Projector launched successfully.", "green")
             except Exception as e:
                 log_message(f"Failed to start Flash Player Projector: {e}. Falling back to Ruffle...", "yellow")
@@ -423,7 +475,10 @@ def launch_game(mode=None):
                 if is_windows:
                     proc = subprocess.Popen(args)
                 else:
-                    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    log_err_path = os.path.join(DIR, "game_error.log")
+                    log_err_file = open(log_err_path, "w", encoding="utf-8")
+                    proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=log_err_file)
+                    log_err_file.close()
                 log_message("Ruffle Desktop launched successfully.", "green")
             except Exception as e:
                 log_message(f"Failed to start Ruffle Desktop: {e}. Falling back to browser...", "yellow")
@@ -435,11 +490,14 @@ def launch_game(mode=None):
     elif mode == "browser":
         url = f"http://127.0.0.1:{port_str}/"
         log_message(f"Opening game in Web Browser: {url}", "cyan")
-        try:
-            webbrowser.open(url)
-            log_message("Browser launched successfully.", "green")
-        except Exception as e:
-            log_message(f"Could not open browser automatically: {e}. Please open {url} manually.", "yellow")
+        if is_wsl_env and open_browser_wsl(url):
+            log_message("Browser launched successfully via WSL host bridge.", "green")
+        else:
+            try:
+                webbrowser.open(url)
+                log_message("Browser launched successfully.", "green")
+            except Exception as e:
+                log_message(f"Could not open browser automatically: {e}. Please open {url} manually.", "yellow")
             
     elif mode == "auto":
         has_flash = os.path.exists(flash_exe)
@@ -457,7 +515,8 @@ def launch_game(mode=None):
             "id": instance_count,
             "process": proc,
             "mode": mode,
-            "start_time": time.strftime("%H:%M:%S")
+            "start_time": time.strftime("%H:%M:%S"),
+            "start_timestamp": time.time()
         }
         game_instances.append(inst)
 
@@ -727,7 +786,40 @@ def monitor_instances():
         exited = []
         for inst in game_instances:
             if inst["process"] and inst["process"].poll() is not None:
-                log_message(f"Game Instance {inst['id']} (PID {inst['process'].pid}) has closed.", "yellow")
+                exit_code = inst["process"].poll()
+                duration = time.time() - inst.get("start_timestamp", 0.0)
+                log_message(f"Game Instance {inst['id']} (PID {inst['process'].pid}) has closed (Exit Code: {exit_code}).", "yellow")
+                
+                # Check for quick crash (within 3 seconds) on Linux/WSL
+                if duration < 3.0 and not sys.platform.startswith('win'):
+                    log_err_path = os.path.join(DIR, "game_error.log")
+                    if os.path.exists(log_err_path):
+                        try:
+                            with open(log_err_path, "r", encoding="utf-8") as f:
+                                err_content = f.read().strip()
+                            if err_content:
+                                print(f"\n{Colors.FAIL}=== GAME PROCESS ERROR LOG ==={Colors.ENDC}", flush=True)
+                                print(err_content, flush=True)
+                                print(f"{Colors.FAIL}=============================={Colors.ENDC}\n", flush=True)
+                                
+                                # Check for common library errors
+                                if "libgtk-x11" in err_content or "libnss3" in err_content or "libnspr4" in err_content:
+                                    print(f"{Colors.YELLOW}Troubleshooting Tip:{Colors.ENDC}", flush=True)
+                                    print("It looks like you are missing required GTK or NSS shared libraries.", flush=True)
+                                    print("Please run one of the following commands to install them:", flush=True)
+                                    print("  - Debian/Ubuntu/Mint:  sudo apt install -y libgtk2.0-0 libnss3 libnspr4", flush=True)
+                                    print("  - Arch Linux/Manjaro:  sudo pacman -S --needed gtk2 nss", flush=True)
+                                    print("  - Fedora/RedHat:       sudo dnf install -y gtk2 nss", flush=True)
+                                    print("", flush=True)
+                                elif "cannot open display" in err_content.lower():
+                                    print(f"{Colors.YELLOW}Troubleshooting Tip:{Colors.ENDC}", flush=True)
+                                    print("It looks like the player could not connect to a display server.", flush=True)
+                                    print("If you are running in WSL/WSL2, make sure you have WSLg active or an X server running on Windows.", flush=True)
+                                    print("You can also launch the game in Web Browser mode [3] to run it natively on your Windows host.", flush=True)
+                                    print("", flush=True)
+                        except Exception:
+                            pass
+                
                 exited.append(inst)
                 
         if exited:

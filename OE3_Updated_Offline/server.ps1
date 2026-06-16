@@ -11,7 +11,7 @@ $global:gameInstances = @()
 $global:instanceCount = 0
 $global:cmdBuffer = ""
 $global:inConsoleMode = $false
-$global:version = "v0.6_Beta"
+$global:version = "v0.6.1_Beta"
 
 function Save-Config {
     $script:config | ConvertTo-Json | Out-File -FilePath $script:configPath -Force -Encoding utf8
