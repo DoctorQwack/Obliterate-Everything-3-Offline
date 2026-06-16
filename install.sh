@@ -86,7 +86,15 @@ echo -e "Downloading release zip file..."
 curl -L -o release.zip "$RELEASE_URL"
 
 echo "Extracting assets to game directory..."
+# Disable exit-on-error temporarily as unzip warns about backslashes in Windows zip files (exits with code 1)
+set +e
 unzip -o release.zip
+UNZIP_STATUS=$?
+set -e
+if [ $UNZIP_STATUS -ne 0 ] && [ $UNZIP_STATUS -ne 1 ]; then
+    echo -e "${RED}Error: Failed to extract release assets (Exit code $UNZIP_STATUS).${NC}"
+    exit $UNZIP_STATUS
+fi
 rm release.zip
 echo -e "${GREEN}Game assets extracted successfully.${NC}\n"
 
