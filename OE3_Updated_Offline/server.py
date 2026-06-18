@@ -634,6 +634,7 @@ def execute_command(input_str):
         print("  saves                Open local saves folder", flush=True)
         print("  check-saves          Perform diagnostic integrity scan on all user saves", flush=True)
         print("  diagnostics          Run server health diagnostics check", flush=True)
+        print("  update [force]       Check and apply system updates in the background", flush=True)
         print("  shutdown             Stop server and exit launcher terminal", flush=True)
         
     elif action == "launch":
@@ -793,6 +794,25 @@ def execute_command(input_str):
     elif action == "diagnostics":
         run_diagnostics()
         
+    elif action == "update":
+        force = False
+        if len(parts) >= 2 and parts[1].lower() == "force":
+            force = True
+        print(f"{Colors.YELLOW}Triggering system update from interactive terminal...{Colors.ENDC}", flush=True)
+        update_script = os.path.join(DIR, "update.py")
+        if os.path.exists(update_script):
+            cmd = [sys.executable, update_script, "--game-dir", DIR, "--silent"]
+            if force:
+                cmd.append("--force")
+            
+            if sys.platform.startswith("win"):
+                subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
+            else:
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            shutdown_server()
+        else:
+            print(f"{Colors.FAIL}Error: update.py not found in game directory.{Colors.ENDC}", flush=True)
+            
     elif action == "shutdown":
         shutdown_server()
         

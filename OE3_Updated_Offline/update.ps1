@@ -1,6 +1,7 @@
 param(
     [string]$GameDir = $PSScriptRoot,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$Silent
 )
 
 # Disable PowerShell progress bar to speed up downloads significantly
@@ -34,7 +35,9 @@ if ($PSScriptRoot -ne $env:TEMP) {
         $res = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "OE3-Updater" }
     } catch {
         Write-Host "Failed to query GitHub API: $_" -ForegroundColor Red
-        Read-Host "Press Enter to exit..."
+        if (-not $Silent) {
+            Read-Host "Press Enter to exit..."
+        }
         exit 1
     }
     
@@ -42,19 +45,29 @@ if ($PSScriptRoot -ne $env:TEMP) {
     Write-Host "Current version: $currentVersion"
     Write-Host "Latest version:  $latestVersion" -ForegroundColor Green
     
-    $force = $false
+    $forceUpdate = $false
     if ($currentVersion -eq $latestVersion) {
         Write-Host "You are already up to date!" -ForegroundColor Green
-        $choice = Read-Host "Do you want to re-install/force update anyway? (y/n)"
-        if ($choice -ne "y") {
-            exit 0
+        if ($Silent) {
+            if (-not $Force) {
+                Write-Host "Exiting updater (already up to date)." -ForegroundColor Green
+                exit 0
+            }
+            $forceUpdate = $true
+        } else {
+            $choice = Read-Host "Do you want to re-install/force update anyway? (y/n)"
+            if ($choice -ne "y") {
+                exit 0
+            }
+            $forceUpdate = $true
         }
-        $force = $true
     } else {
         Write-Host "New version $latestVersion is available!" -ForegroundColor Yellow
-        $choice = Read-Host "Do you want to download and install this update? (y/n, default y)"
-        if ($choice -eq "n") {
-            exit 0
+        if (-not $Silent) {
+            $choice = Read-Host "Do you want to download and install this update? (y/n, default y)"
+            if ($choice -eq "n") {
+                exit 0
+            }
         }
     }
     
@@ -63,8 +76,9 @@ if ($PSScriptRoot -ne $env:TEMP) {
     Copy-Item -Path (Join-Path $GameDir $scriptName) -Destination $tempScript -Force
     
     # Launch new process and exit
-    $argsList = "-NoProfile -ExecutionPolicy Bypass -File `"$tempScript`" -GameDir `"$GameDir`""
-    if ($force) { $argsList += " -Force" }
+    $argsList = "-NoProfile -ExecutionPolicy Bypass -File `"{0}`" -GameDir `"{1}`"" -f $tempScript, $GameDir
+    if ($forceUpdate -or $Force) { $argsList += " -Force" }
+    if ($Silent) { $argsList += " -Silent" }
     Start-Process -FilePath "powershell.exe" -ArgumentList $argsList
     exit 0
 }
@@ -144,7 +158,9 @@ try {
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip
 } catch {
     Write-Host "Failed to download update: $_" -ForegroundColor Red
-    Read-Host "Press Enter to exit..."
+    if (-not $Silent) {
+        Read-Host "Press Enter to exit..."
+    }
     exit 1
 }
 
@@ -157,7 +173,9 @@ try {
     Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
 } catch {
     Write-Host "Failed to extract update package: $_" -ForegroundColor Red
-    Read-Host "Press Enter to exit..."
+    if (-not $Silent) {
+        Read-Host "Press Enter to exit..."
+    }
     exit 1
 }
 

@@ -669,6 +669,7 @@ function Execute-ConsoleCommand($inputStr) {
             Write-Host "  check-saves          Perform diagnostic integrity scan on all user saves"
             Write-Host "  converter            Open the Web legacy save converter in your browser"
             Write-Host "  diagnostics          Run server health diagnostics check"
+            Write-Host "  update [force]       Check and apply system updates in the background"
             Write-Host "  shutdown             Stop server and exit launcher terminal"
         }
         "launch" {
@@ -922,6 +923,29 @@ function Execute-ConsoleCommand($inputStr) {
         }
         "diagnostics" {
             Run-Diagnostics
+        }
+        "update" {
+            $force = $false
+            if ($parts.Count -ge 2 -and $parts[1].ToLower() -eq "force") {
+                $force = $true
+            }
+            Write-Host "Triggering system update from interactive terminal..." -ForegroundColor Yellow
+            $updateScript = Join-Path $script:dir "update.ps1"
+            if (Test-Path $updateScript) {
+                $argsList = "-NoProfile -ExecutionPolicy Bypass -File `"{0}`" -GameDir `"{1}`" -Silent" -f $updateScript, $script:dir
+                if ($force) {
+                    $argsList += " -Force"
+                }
+                Start-Process -FilePath "powershell.exe" -ArgumentList $argsList -WindowStyle Normal
+                Log-Message "Shutdown triggered by background update command." "Red"
+                foreach ($inst in $global:gameInstances) {
+                    try { $inst.process.Kill() } catch {}
+                }
+                $script:l.Stop()
+                exit 0
+            } else {
+                Write-Host "Error: update.ps1 not found in game directory." -ForegroundColor Red
+            }
         }
         "shutdown" {
             Write-Host "Shutting down HTTP server..." -ForegroundColor Red
