@@ -40,7 +40,7 @@ def scan_usernames(db_path, query):
     index_path = "legacy_index.json"
     if os.path.exists(index_path):
         try:
-            with open(index_path, 'r', encoding='utf-8') as f:
+            with open(index_path, 'r', encoding='utf-8-sig') as f:
                 index_data = json.load(f)
             matches = []
             for item in index_data:

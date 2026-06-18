@@ -20,7 +20,7 @@ import shutil
 DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Global states
-VERSION = "v0.6.1_Beta"
+VERSION = "v0.6.2_Beta"
 port = 8765
 force_vault_refresh = False
 force_logout = False
@@ -83,7 +83,7 @@ def load_config():
     global config
     if os.path.exists(config_path):
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, "r", encoding="utf-8-sig") as f:
                 loaded = json.load(f)
                 for k, v in loaded.items():
                     config[k] = v
@@ -187,7 +187,7 @@ class OE3HTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 
         if os.path.exists(save_file) and os.path.isfile(save_file):
             try:
-                with open(save_file, "r", encoding="utf-8") as f:
+                with open(save_file, "r", encoding="utf-8-sig") as f:
                     data = json.load(f)
                 self.send_json_response(200, data)
                 log_message(f"Request: GET /load?user={user_safe} -> 200 OK (Loaded profile)", "green")
@@ -316,6 +316,22 @@ class OE3HTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             if not path.startswith("saves/"):
                 log_message(f"Request: GET /{path} -> 404 Not Found", "yellow")
+
+def is_key_pressed():
+    if sys.platform.startswith('win'):
+        try:
+            import msvcrt
+            return msvcrt.kbhit()
+        except Exception:
+            pass
+    else:
+        try:
+            import select
+            r, _, _ = select.select([sys.stdin], [], [], 0.0)
+            return bool(r)
+        except Exception:
+            pass
+    return False
 
 def is_wsl():
     if sys.platform.startswith('linux'):
@@ -563,7 +579,7 @@ def check_saves():
         error_msg = ""
         
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8-sig") as f:
                 json_data = json.load(f)
             if not json_data:
                 status = "EMPTY FILE"
@@ -795,7 +811,7 @@ def monitor_instances():
                     log_err_path = os.path.join(DIR, "game_error.log")
                     if os.path.exists(log_err_path):
                         try:
-                            with open(log_err_path, "r", encoding="utf-8") as f:
+                            with open(log_err_path, "r", encoding="utf-8-sig") as f:
                                 err_content = f.read().strip()
                             if err_content:
                                 print(f"\n{Colors.FAIL}=== GAME PROCESS ERROR LOG ==={Colors.ENDC}", flush=True)
@@ -833,10 +849,17 @@ def monitor_instances():
                     if not autoshutdown_active:
                         break
                     print(f"{sec}... ", end="", flush=True)
-                    time.sleep(1.0)
+                    # Check for keypress during sleep interval responsively
+                    for _ in range(10):
+                        if not autoshutdown_active or is_key_pressed():
+                            autoshutdown_active = False
+                            break
+                        time.sleep(0.1)
                 print("")
                 if autoshutdown_active:
                     shutdown_server()
+                else:
+                    print("Auto-shutdown cancelled. Console opened.", flush=True)
 
 # Setup clean log.txt on start
 def setup_log():
