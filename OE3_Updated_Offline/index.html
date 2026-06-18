@@ -285,6 +285,8 @@
     document.addEventListener("webkitfullscreenchange", onFullscreenChange);
     document.addEventListener("msfullscreenchange", onFullscreenChange);
 
+    let swfName = "OE3_UPDATED.swf";
+
     window.addEventListener("load", function() {
       console.log("Window load event. Setting up Ruffle...");
       statusEl.textContent = "Loading Ruffle Engine...";
@@ -299,14 +301,17 @@
             qualitySelect.value = savedQuality;
             window.RufflePlayer.config.quality = savedQuality;
           }
-          initializeRuffle();
+          if (cfg && cfg.audio_quality === "high") {
+            swfName = "OE3_HQ.swf";
+          }
+          initializeRuffle(swfName);
         }).catch(err => {
           console.log("Failed to load server config, using defaults:", err);
-          initializeRuffle();
+          initializeRuffle(swfName);
         });
     });
 
-    function initializeRuffle() {
+    function initializeRuffle(targetSwf = "OE3_UPDATED.swf") {
       const ruffle = window.RufflePlayer.newest();
       if (!ruffle) {
         console.error("RufflePlayer.newest() returned undefined. ruffle.js may have failed to load.");
@@ -322,11 +327,11 @@
       const container = document.getElementById("player-container");
       container.appendChild(player);
       
-      console.log("Loading SWF: OE3_UPDATED.swf with quality settings: " + savedQuality);
+      console.log("Loading SWF: " + targetSwf + " with quality settings: " + savedQuality);
       statusEl.textContent = "Loading Game SWF (" + savedQuality.toUpperCase() + " quality)...";
       
       player.load({
-        url: "OE3_UPDATED.swf",
+        url: targetSwf,
       }).then(() => {
         console.log("OE3 SWF successfully loaded into Ruffle.");
         statusEl.textContent = "Game Loaded!";

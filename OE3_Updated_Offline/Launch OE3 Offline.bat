@@ -32,7 +32,7 @@ $global:gameInstances = @()
 $global:instanceCount = 0
 $global:cmdBuffer = ""
 $global:inConsoleMode = $false
-$global:version = "v0.6_Beta"
+$global:version = "v0.6.3_Beta"
 
 function Save-Config {
     $script:config | ConvertTo-Json | Out-File -FilePath $script:configPath -Force -Encoding utf8
@@ -354,6 +354,7 @@ if ($null -eq $config) {
         default_quality = "medium"
         disable_plat_purchase = $false
         store_refresh_period_minutes = 60
+        audio_quality = "standard"
     }
 }
 
@@ -365,6 +366,7 @@ if ($null -eq $config.ruffle_backend) { $config | Add-Member -MemberType NotePro
 if ($null -eq $config.default_quality) { $config | Add-Member -MemberType NoteProperty -Name "default_quality" -Value "medium" -Force; $configUpdated = $true }
 if ($null -eq $config.disable_plat_purchase) { $config | Add-Member -MemberType NoteProperty -Name "disable_plat_purchase" -Value $false -Force; $configUpdated = $true }
 if ($null -eq $config.store_refresh_period_minutes) { $config | Add-Member -MemberType NoteProperty -Name "store_refresh_period_minutes" -Value 60 -Force; $configUpdated = $true }
+if ($null -eq $config.audio_quality) { $config | Add-Member -MemberType NoteProperty -Name "audio_quality" -Value "standard" -Force; $configUpdated = $true }
 
 if ($configUpdated) {
     Save-Config
@@ -392,6 +394,16 @@ try {
     Log-Message "OE3_UPDATED.swf check: $swfStatus" $swfColor
 } catch {
     Log-Message "Error checking OE3_UPDATED.swf: $_" "Red"
+}
+
+try {
+    $hqSwfPath = [System.IO.Path]::Combine($dir, "OE3_HQ.swf")
+    $hqSwfExists = [System.IO.File]::Exists($hqSwfPath)
+    $hqSwfStatus = if ($hqSwfExists) { "FOUND" } else { "NOT FOUND (Optional)" }
+    $hqSwfColor = if ($hqSwfExists) { "Green" } else { "Yellow" }
+    Log-Message "OE3_HQ.swf check: $hqSwfStatus" $hqSwfColor
+} catch {
+    Log-Message "Error checking OE3_HQ.swf: $_" "Red"
 }
 
 # 1.5 Auto-migrate existing saves from root folder to saves/ folder
@@ -556,12 +568,14 @@ function Start-GameInstance {
         }
     }
     
+    $swfName = if ($script:config.audio_quality -eq "high") { "OE3_HQ.swf" } else { "OE3_UPDATED.swf" }
+    
     $proc = $null
     if ($mode -eq "flashplayer") {
         if ([System.IO.File]::Exists($flashplayerExe)) {
             try {
-                Log-Message "Launching game natively on http://127.0.0.1:$script:port/OE3_UPDATED.swf using Flash Player Projector..." "Gray"
-                $proc = Start-Process -FilePath $flashplayerExe -ArgumentList "http://127.0.0.1:$script:port/OE3_UPDATED.swf" -PassThru
+                Log-Message "Launching game natively on http://127.0.0.1:$script:port/$swfName using Flash Player Projector..." "Gray"
+                $proc = Start-Process -FilePath $flashplayerExe -ArgumentList "http://127.0.0.1:$script:port/$swfName" -PassThru
                 Log-Message "Flash Player Projector launched successfully." "Green"
             } catch {
                 Log-Message "Failed to start Flash Player Projector. Falling back to Ruffle..." "Yellow"
@@ -581,8 +595,8 @@ function Start-GameInstance {
                 $env:RUFFLE_BACKEND = $backend
                 $env:WGPU_BACKEND = $backend
                 
-                Log-Message "Launching game natively on http://127.0.0.1:$script:port/OE3_UPDATED.swf using graphics backend '$backend'..." "Gray"
-                $proc = Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$script:port/OE3_UPDATED.swf", "-g", $backend -PassThru
+                Log-Message "Launching game natively on http://127.0.0.1:$script:port/$swfName using graphics backend '$backend'..." "Gray"
+                $proc = Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$script:port/$swfName", "-g", $backend -PassThru
                 Log-Message "Ruffle Desktop launched successfully." "Green"
             } catch {
                 Log-Message "Failed to start Ruffle Desktop. Falling back to web browser..." "Yellow"
@@ -668,6 +682,7 @@ function Execute-ConsoleCommand($inputStr) {
             Write-Host "  mode <type>          Set launch mode (ask, flashplayer, ruffle, browser, auto)"
             Write-Host "  quality <val>        Set default Ruffle graphics quality (high, medium, low)"
             Write-Host "  backend <type>       Set default Ruffle backend (dx12, vulkan, dx11, gl, default)"
+            Write-Host "  audio <type>         Set default audio quality (standard, high)"
             Write-Host "  plat, platt <on/off> Toggle platinum purchasing (enable/disable)"
             Write-Host "  store-period <min>   Set store refresh period in minutes"
             Write-Host "  refresh-store        Force immediate shop items and vault clock refresh"
@@ -744,6 +759,7 @@ function Execute-ConsoleCommand($inputStr) {
             Write-Host "  Default Quality:        $($script:config.default_quality)"
             Write-Host "  Disable Plat Purchase:  $($script:config.disable_plat_purchase)"
             Write-Host "  Store Refresh Period:   $($script:config.store_refresh_period_minutes) minutes"
+            Write-Host "  Audio Quality:          $($script:config.audio_quality)"
         }
         "mode" {
             if ($parts.Count -lt 2) {
@@ -787,6 +803,21 @@ function Execute-ConsoleCommand($inputStr) {
                     Write-Host "Ruffle backend set to '$newB'." -ForegroundColor Green
                 } else {
                     Write-Host "Invalid backend: '$newB'. Select from: dx12, vulkan, dx11, gl, default" -ForegroundColor Red
+                }
+            }
+        }
+        "audio" {
+            if ($parts.Count -lt 2) {
+                Write-Host "Current Audio Quality: $($script:config.audio_quality)" -ForegroundColor Yellow
+                Write-Host "Usage: audio [standard|high]" -ForegroundColor Yellow
+            } else {
+                $aq = $parts[1].ToLower()
+                if ($aq -in @("standard", "high")) {
+                    $script:config.audio_quality = $aq
+                    Save-Config
+                    Write-Host "Audio quality set to '$aq'." -ForegroundColor Green
+                } else {
+                    Write-Host "Invalid audio quality choice. Select from: standard, high" -ForegroundColor Red
                 }
             }
         }

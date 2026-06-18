@@ -76,7 +76,8 @@ config = {
     "ruffle_backend": "default",
     "default_quality": "medium",
     "disable_plat_purchase": False,
-    "store_refresh_period_minutes": 60
+    "store_refresh_period_minutes": 60,
+    "audio_quality": "standard"
 }
 
 def load_config():
@@ -152,6 +153,7 @@ class OE3HTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             "default_quality": config["default_quality"],
             "disable_plat_purchase": config["disable_plat_purchase"],
             "store_refresh_period_minutes": config["store_refresh_period_minutes"],
+            "audio_quality": config.get("audio_quality", "standard"),
             "force_vault_refresh": force_vault_refresh,
             "force_logout": force_logout
         }
@@ -424,6 +426,9 @@ def launch_game(mode=None):
     port_str = str(port)
     is_wsl_env = is_wsl()
     
+    # Determine SWF based on configured audio quality
+    swf_name = "OE3_HQ.swf" if config.get("audio_quality", "standard") == "high" else "OE3_UPDATED.swf"
+    
     # Check for missing display server on WSL/Linux for GUI modes
     if mode in ("flashplayer", "ruffle") and not is_windows:
         has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
@@ -460,7 +465,7 @@ def launch_game(mode=None):
         
     elif mode == "flashplayer":
         if os.path.exists(flash_exe):
-            url = f"http://127.0.0.1:{port_str}/OE3_UPDATED.swf"
+            url = f"http://127.0.0.1:{port_str}/{swf_name}"
             log_message(f"Launching Flash Player Projector: {url}", "cyan")
             try:
                 if is_windows:
@@ -481,7 +486,7 @@ def launch_game(mode=None):
     elif mode == "ruffle":
         has_ruffle = os.path.exists(ruffle_exe) or (not is_windows and shutil.which("ruffle") is not None)
         if has_ruffle:
-            url = f"http://127.0.0.1:{port_str}/OE3_UPDATED.swf"
+            url = f"http://127.0.0.1:{port_str}/{swf_name}"
             backend = config.get("ruffle_backend", "default")
             log_message(f"Launching Ruffle Desktop Player with graphics backend '{backend}'...", "cyan")
             try:
@@ -545,7 +550,7 @@ def run_diagnostics():
     print(f"  Port Binding:           http://127.0.0.1:{port}/", flush=True)
     
     is_windows = sys.platform.startswith('win')
-    files = ["index.html", "OE3_UPDATED.swf", "flashplayer.exe" if is_windows else "flashplayer", "ruffle.exe" if is_windows else "ruffle"]
+    files = ["index.html", "OE3_UPDATED.swf", "OE3_HQ.swf", "flashplayer.exe" if is_windows else "flashplayer", "ruffle.exe" if is_windows else "ruffle"]
     print("  File Checks:", flush=True)
     for f in files:
         p = os.path.join(DIR, f)
@@ -622,6 +627,7 @@ def execute_command(input_str):
         print("  mode <type>          Set launch mode (ask, flashplayer, ruffle, browser, auto)", flush=True)
         print("  quality <val>        Set default Ruffle graphics quality (high, medium, low)", flush=True)
         print("  backend <type>       Set default Ruffle backend (vulkan, dx12, dx11, gl, default)", flush=True)
+        print("  audio <type>         Set default audio quality (standard, high)", flush=True)
         print("  plat <on/off>        Toggle Platinum purchases (on/off)", flush=True)
         print("  store-period <min>   Set store refresh period in minutes", flush=True)
         print("  refresh-store        Force immediate shop items and vault clock refresh", flush=True)
@@ -719,6 +725,19 @@ def execute_command(input_str):
                 print(f"{Colors.GREEN}Ruffle backend set to '{b}' in config.json.{Colors.ENDC}", flush=True)
             else:
                 print(f"{Colors.FAIL}Invalid backend choice. Choose: vulkan, dx12, dx11, gl, default{Colors.ENDC}", flush=True)
+                
+    elif action == "audio":
+        if len(parts) < 2:
+            print(f"Current Audio Quality: {config.get('audio_quality', 'standard')}", flush=True)
+            print("Valid Options: standard, high", flush=True)
+        else:
+            aq = parts[1].lower()
+            if aq in ("standard", "high"):
+                config["audio_quality"] = aq
+                save_config()
+                print(f"{Colors.GREEN}Audio quality set to '{aq}' in config.json.{Colors.ENDC}", flush=True)
+            else:
+                print(f"{Colors.FAIL}Invalid audio quality choice. Choose: standard, high{Colors.ENDC}", flush=True)
                 
     elif action == "plat":
         if len(parts) < 2:

@@ -1,0 +1,167 @@
+this is what i ran into. take care of this once you see this
+
+I also couldn't get the game to run.
+
+
+====================================================================
+      INSTALLATION SUCCESSFUL!
+====================================================================
+  The game has been installed to: /home/maxxer/OE3-Offline
+
+  To start the game server & play:
+    1. Open your Applications Menu and search for Obliterate Everything 3
+    2. Or run it directly from your terminal:
+       cd ~/OE3-Offline && ./launch.sh
+
+  GTK Libraries Dependency Warning (For Native Player Mode):
+  If launching the native Flash Player fails with library error issues,
+  please run the following command to install the required GTK/NSS libraries:
+    - Debian/Ubuntu/Mint:  sudo apt install -y libgtk2.0-0 libnss3 libnspr4
+    - Arch Linux/Manjaro:  sudo pacman -S --needed gtk2 nss
+    - Fedora/RedHat:       sudo dnf install -y gtk2 nss
+====================================================================
+maxxer@QESLAPTOP294:~/OE3-Offline$ ./launch.sh
+[2026-06-15 18:23:29] =========================================
+[2026-06-15 18:23:29]    OE3 Offline Server Starting (v0.6.1_Beta)...
+[2026-06-15 18:23:29]    Serving from: /home/maxxer/OE3-Offline
+[2026-06-15 18:23:29] =========================================
+[2026-06-15 18:23:29] Error parsing config.json: Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0). Recreating defaults.
+[2026-06-15 18:23:29] Checking port conflict for port 8765...
+[2026-06-15 18:23:29] HTTP Server successfully started and listening at http://127.0.0.1:8765/
+
+==================================================
+ Choose Graphics/Engine Launch Option:
+==================================================
+ [1] Standalone Flash Player (Available - Recommended)
+ [2] Ruffle Desktop Player (Available)
+ [3] Web Browser (Local Ruffle WebAssembly)
+ [4] Auto-Detect (Uses best available)
+==================================================
+ Enter choice (1-4, Default is 1): 1
+ Remember this selection for next launch? (y/n): y
+[2026-06-15 18:23:34] Launch mode selection remembered.
+[2026-06-15 18:23:34] Launching Flash Player Projector: http://127.0.0.1:8765/OE3_UPDATED.swf
+[2026-06-15 18:23:34] Flash Player Projector launched successfully.
+
+Server running. Keep this window open while playing.
+Type commands directly below. Type 'help' for command list.
+
+Console> [2026-06-15 18:23:34] Game Instance 1 (PID 7567) has closed (Exit Code: 127).
+
+=== GAME PROCESS ERROR LOG ===
+/home/maxxer/OE3-Offline/flashplayer: error while loading shared libraries: libnss3.so: cannot open shared object file: No such file or directory
+==============================
+
+Troubleshooting Tip:
+It looks like you are missing required GTK or NSS shared libraries.
+Please run one of the following commands to install them:
+  - Debian/Ubuntu/Mint:  sudo apt install -y libgtk2.0-0 libnss3 libnspr4
+  - Arch Linux/Manjaro:  sudo pacman -S --needed gtk2 nss
+  - Fedora/RedHat:       sudo dnf install -y gtk2 nss
+
+
+All game instances have closed. Server will auto-shutdown in 5 seconds.
+Press Enter or type any command to cancel countdown and open console.
+5... 4... 3... 2... 1...
+[2026-06-15 18:23:39] Shutting down HTTP server...
+maxxer@QESLAPTOP294:~/OE3-Offline$ sudo apt install -y libgtk2.0-0 libnss3 libnspr4
+[sudo] password for maxxer:
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+Note, selecting 'libgtk2.0-0t64' instead of 'libgtk2.0-0'
+The following additional packages will be installed:
+  libgail-common libgail18t64 libgtk2.0-bin libgtk2.0-common
+Suggested packages:
+  gvfs
+The following NEW packages will be installed:
+  libgail-common libgail18t64 libgtk2.0-0t64 libgtk2.0-bin libgtk2.0-common libnspr4 libnss3
+0 upgraded, 7 newly installed, 0 to remove and 214 not upgraded.
+Need to get 3845 kB of archives.
+After this operation, 11.3 MB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libgtk2.0-common all 2.24.33-4ubuntu1.1 [127 kB]
+Get:2 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libgtk2.0-0t64 amd64 2.24.33-4ubuntu1.1 [2006 kB]
+Get:3 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libgail18t64 amd64 2.24.33-4ubuntu1.1 [15.9 kB]
+Get:4 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libgail-common amd64 2.24.33-4ubuntu1.1 [126 kB]
+Get:5 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libgtk2.0-bin amd64 2.24.33-4ubuntu1.1 [7954 B]
+Get:6 http://archive.ubuntu.com/ubuntu noble/main amd64 libnspr4 amd64 2:4.35-1.1build1 [117 kB]
+Get:7 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 libnss3 amd64 2:3.98-1ubuntu0.1 [1445 kB]
+Fetched 3845 kB in 0s (8622 kB/s)
+Selecting previously unselected package libgtk2.0-common.
+(Reading database ... 40812 files and directories currently installed.)
+Preparing to unpack .../0-libgtk2.0-common_2.24.33-4ubuntu1.1_all.deb ...
+Unpacking libgtk2.0-common (2.24.33-4ubuntu1.1) ...
+Selecting previously unselected package libgtk2.0-0t64:amd64.
+Preparing to unpack .../1-libgtk2.0-0t64_2.24.33-4ubuntu1.1_amd64.deb ...
+Unpacking libgtk2.0-0t64:amd64 (2.24.33-4ubuntu1.1) ...
+Selecting previously unselected package libgail18t64:amd64.
+Preparing to unpack .../2-libgail18t64_2.24.33-4ubuntu1.1_amd64.deb ...
+Unpacking libgail18t64:amd64 (2.24.33-4ubuntu1.1) ...
+Selecting previously unselected package libgail-common:amd64.
+Preparing to unpack .../3-libgail-common_2.24.33-4ubuntu1.1_amd64.deb ...
+Unpacking libgail-common:amd64 (2.24.33-4ubuntu1.1) ...
+Selecting previously unselected package libgtk2.0-bin.
+Preparing to unpack .../4-libgtk2.0-bin_2.24.33-4ubuntu1.1_amd64.deb ...
+Unpacking libgtk2.0-bin (2.24.33-4ubuntu1.1) ...
+Selecting previously unselected package libnspr4:amd64.
+Preparing to unpack .../5-libnspr4_2%3a4.35-1.1build1_amd64.deb ...
+Unpacking libnspr4:amd64 (2:4.35-1.1build1) ...
+Selecting previously unselected package libnss3:amd64.
+Preparing to unpack .../6-libnss3_2%3a3.98-1ubuntu0.1_amd64.deb ...
+Unpacking libnss3:amd64 (2:3.98-1ubuntu0.1) ...
+Setting up libnspr4:amd64 (2:4.35-1.1build1) ...
+Setting up libgtk2.0-common (2.24.33-4ubuntu1.1) ...
+Setting up libnss3:amd64 (2:3.98-1ubuntu0.1) ...
+Setting up libgtk2.0-0t64:amd64 (2.24.33-4ubuntu1.1) ...
+Setting up libgail18t64:amd64 (2.24.33-4ubuntu1.1) ...
+Setting up libgtk2.0-bin (2.24.33-4ubuntu1.1) ...
+Setting up libgail-common:amd64 (2.24.33-4ubuntu1.1) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.3) ...
+maxxer@QESLAPTOP294:~/OE3-Offline$ ./launch.sh
+[2026-06-15 18:25:09] =========================================
+[2026-06-15 18:25:09]    OE3 Offline Server Starting (v0.6.1_Beta)...
+[2026-06-15 18:25:09]    Serving from: /home/maxxer/OE3-Offline
+[2026-06-15 18:25:09] =========================================
+[2026-06-15 18:25:09] Loaded launcher config from config.json.
+[2026-06-15 18:25:09] Checking port conflict for port 8765...
+[2026-06-15 18:25:09] HTTP Server successfully started and listening at http://127.0.0.1:8765/
+[2026-06-15 18:25:09] Launching Flash Player Projector: http://127.0.0.1:8765/OE3_UPDATED.swf
+[2026-06-15 18:25:09] Flash Player Projector launched successfully.
+
+Server running. Keep this window open while playing.
+Type commands directly below. Type 'help' for command list.
+
+Console> [2026-06-15 18:25:09] Request: GET /OE3_UPDATED.swf -> 200 OK (12111447 bytes, application/x-shockwave-flash)
+[2026-06-15 18:25:31] Request: GET /config -> 200 OK (Served config)
+[2026-06-15 18:25:31] Request: GET /load?user=max -> 404 Not Found (No save file)
+[2026-06-15 18:25:31] [CLIENT] [INFO] No local save file found for max. Checking SharedObject...
+[2026-06-15 18:25:31] [CLIENT] [INFO] No SharedObject save found for max. Created new profile.
+[2026-06-15 18:25:31] Request: POST /save?user=max -> 200 OK (Saved profile)
+[2026-06-15 18:25:31] Request: POST /save?user=max -> 200 OK (Saved profile)
+[2026-06-15 18:25:31] [CLIENT] [INFO] Saved profile changes to local save file.
+[2026-06-15 18:25:31] [CLIENT] [INFO] Saved profile changes to local save file.
+[2026-06-15 18:25:31] [CLIENT] [INFO] User login complete: max
+[2026-06-15 18:25:41] Request: GET /config -> 200 OK (Served config)
+[2026-06-15 18:26:07] Request: GET /config -> 200 OK (Served config)
+[2026-06-15 18:26:10] Game Instance 1 (PID 8212) has closed (Exit Code: 0).
+
+All game instances have closed. Server will auto-shutdown in 5 seconds.
+Press Enter or type any command to cancel countdown and open console.
+5... laau4... n2... 1...
+Auto-shutdown cancelled.
+Console> la
+unch
+[2026-06-15 18:26:17] Launching Flash Player Projector: http://127.0.0.1:8765/OE3_UPDATED.swf
+[2026-06-15 18:26:17] Flash Player Projector launched successfully.
+Console> [2026-06-15 18:26:17] Request: GET /OE3_UPDATED.swf -> 200 OK (12111447 bytes, application/x-shockwave-flash)
+[2026-06-15 18:26:58] Request: GET /load?user=max -> 200 OK (Loaded profile)
+[2026-06-15 18:26:58] Request: GET /config -> 200 OK (Served config)
+[2026-06-15 18:26:58] [CLIENT] [INFO] Loaded user save from file: max
+[2026-06-15 18:26:58] Request: POST /save?user=max -> 200 OK (Saved profile)
+[2026-06-15 18:26:58] [CLIENT] [INFO] Saved profile changes to local save file.
+[2026-06-15 18:26:58] [CLIENT] [INFO] User login complete: max
+[2026-06-15 18:27:01] Game Instance 2 (PID 8599) has closed (Exit Code: 0).
+
+All game instances have closed. Server will auto-shutdown in 5 seconds.
+Press Enter or type any command to cancel countdown and open c
