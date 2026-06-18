@@ -22,6 +22,26 @@ def get_current_version(game_dir):
             pass
     return "v0.0_Beta"
 
+def exit_updater(game_dir, exit_code, silent, message=None):
+    if message:
+        print(message, flush=True)
+    if silent:
+        print("Relaunching launcher...", flush=True)
+        time.sleep(2.0)
+        if sys.platform.startswith("win"):
+            bat_file = os.path.join(game_dir, "Launch OE3 Offline.bat")
+            subprocess.Popen(["cmd.exe", "/c", bat_file], cwd=game_dir)
+        else:
+            sh_file = os.path.join(game_dir, "launch.sh")
+            if os.path.exists(sh_file):
+                subprocess.Popen(["bash", sh_file], cwd=game_dir)
+            else:
+                subprocess.Popen(["python3", "server.py"], cwd=game_dir)
+    else:
+        if exit_code != 0:
+            input("Press Enter to exit...")
+    sys.exit(exit_code)
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="OE3 Offline Updater")
@@ -54,10 +74,7 @@ def main():
             with urllib.request.urlopen(req, timeout=10) as response:
                 res = json.loads(response.read().decode("utf-8"))
         except Exception as e:
-            print(f"Failed to query GitHub API: {e}", flush=True)
-            if not args.silent:
-                input("Press Enter to exit...")
-            sys.exit(1)
+            exit_updater(game_dir, 1, args.silent, f"Failed to query GitHub API: {e}")
 
         latest_version = res["tag_name"]
         print(f"Current version: {current_version}", flush=True)
@@ -69,7 +86,7 @@ def main():
             if args.silent:
                 if not args.force:
                     print("Exiting updater (already up to date).", flush=True)
-                    sys.exit(0)
+                    exit_updater(game_dir, 0, True)
                 force_update = True
             else:
                 choice = input("Do you want to re-install/force update anyway? (y/n): ").strip().lower()
@@ -135,10 +152,7 @@ def main():
         with urllib.request.urlopen(req, timeout=10) as response:
             res = json.loads(response.read().decode("utf-8"))
     except Exception as e:
-        print(f"Failed to query GitHub API: {e}", flush=True)
-        if not args.silent:
-            input("Press Enter to exit...")
-        sys.exit(1)
+        exit_updater(game_dir, 1, args.silent, f"Failed to query GitHub API: {e}")
 
     latest_version = res["tag_name"]
     is_legacy_edition = os.path.exists(os.path.join(game_dir, "converter.html"))
@@ -163,10 +177,7 @@ def main():
         filename = res["assets"][0]["name"]
 
     if not download_url:
-        print("Error: No download assets found in latest release.", flush=True)
-        if not args.silent:
-            input("Press Enter to exit...")
-        sys.exit(1)
+        exit_updater(game_dir, 1, args.silent, "Error: No download assets found in latest release.")
 
     print(f"Downloading: {filename}...", flush=True)
     temp_zip = os.path.join(temp_dir, filename)
@@ -179,10 +190,7 @@ def main():
     try:
         urllib.request.urlretrieve(download_url, temp_zip)
     except Exception as e:
-        print(f"Failed to download update: {e}", flush=True)
-        if not args.silent:
-            input("Press Enter to exit...")
-        sys.exit(1)
+        exit_updater(game_dir, 1, args.silent, f"Failed to download update: {e}")
 
     print("Extracting update package...", flush=True)
     temp_extract = os.path.join(temp_dir, "oe3_extract")
@@ -197,10 +205,7 @@ def main():
         with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
             zip_ref.extractall(temp_extract)
     except Exception as e:
-        print(f"Failed to extract update package: {e}", flush=True)
-        if not args.silent:
-            input("Press Enter to exit...")
-        sys.exit(1)
+        exit_updater(game_dir, 1, args.silent, f"Failed to extract update package: {e}")
 
     print("Applying update files...", flush=True)
     for root, dirs, files in os.walk(temp_extract):

@@ -16,6 +16,22 @@ if ($GameDir) { $GameDir = $GameDir.TrimEnd('\') }
 $scriptName = "update.ps1"
 $tempScript = Join-Path $env:TEMP "oe3_update.ps1"
 
+function Exit-Updater($exitCode, $message) {
+    if ($message) {
+        Write-Host $message -ForegroundColor Red
+    }
+    if ($Silent) {
+        Write-Host "Relaunching launcher..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 2
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$GameDir\Launch OE3 Offline.bat`"" -WorkingDirectory $GameDir
+    } else {
+        if ($exitCode -ne 0) {
+            Read-Host "Press Enter to exit..."
+        }
+    }
+    exit $exitCode
+}
+
 # 1. Self-relocation logic to avoid file locks
 if ($PSScriptRoot -ne $env:TEMP) {
     # Running from game folder. Check for updates first!
@@ -34,11 +50,7 @@ if ($PSScriptRoot -ne $env:TEMP) {
     try {
         $res = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "OE3-Updater" }
     } catch {
-        Write-Host "Failed to query GitHub API: $_" -ForegroundColor Red
-        if (-not $Silent) {
-            Read-Host "Press Enter to exit..."
-        }
-        exit 1
+        Exit-Updater 1 "Failed to query GitHub API: $_"
     }
     
     $latestVersion = $res.tag_name
@@ -51,7 +63,7 @@ if ($PSScriptRoot -ne $env:TEMP) {
         if ($Silent) {
             if (-not $Force) {
                 Write-Host "Exiting updater (already up to date)." -ForegroundColor Green
-                exit 0
+                Exit-Updater 0
             }
             $forceUpdate = $true
         } else {
@@ -121,7 +133,11 @@ Write-Host "`nAll instances closed. Proceeding with update." -ForegroundColor Gr
 
 # 2. Query latest asset
 $apiUrl = "https://api.github.com/repos/DoctorQwack/Obliterate-Everything-3-Offline/releases/latest"
-$res = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "OE3-Updater" }
+try {
+    $res = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "OE3-Updater" }
+} catch {
+    Exit-Updater 1 "Failed to query GitHub API: $_"
+}
 $latestVersion = $res.tag_name
 
 # Determine if converter files exist (Legacy saves edition)
@@ -157,11 +173,7 @@ if (Test-Path $tempZip) { Remove-Item $tempZip -Force | Out-Null }
 try {
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip
 } catch {
-    Write-Host "Failed to download update: $_" -ForegroundColor Red
-    if (-not $Silent) {
-        Read-Host "Press Enter to exit..."
-    }
-    exit 1
+    Exit-Updater 1 "Failed to download update: $_"
 }
 
 Write-Host "Extracting update package..." -ForegroundColor Cyan
@@ -172,11 +184,7 @@ New-Item -ItemType Directory -Path $tempExtract | Out-Null
 try {
     Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
 } catch {
-    Write-Host "Failed to extract update package: $_" -ForegroundColor Red
-    if (-not $Silent) {
-        Read-Host "Press Enter to exit..."
-    }
-    exit 1
+    Exit-Updater 1 "Failed to extract update package: $_"
 }
 
 Write-Host "Applying update files..." -ForegroundColor Gray
