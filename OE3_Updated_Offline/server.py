@@ -20,7 +20,7 @@ import shutil
 DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Global states
-VERSION = "v0.6.2_Beta"
+VERSION = "v0.7_Beta"
 port = 8765
 force_vault_refresh = False
 force_logout = False
