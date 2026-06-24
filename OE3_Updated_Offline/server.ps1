@@ -11,7 +11,7 @@ $global:gameInstances = @()
 $global:instanceCount = 0
 $global:cmdBuffer = ""
 $global:inConsoleMode = $false
-$global:version = "v0.7_Beta"
+$global:version = "v0.7.1_Beta"
 
 function Save-Config {
     $script:config | ConvertTo-Json | Out-File -FilePath $script:configPath -Force -Encoding utf8
@@ -523,7 +523,16 @@ function Set-WindowTitle($proc, $title) {
 }
 
 function Start-GameInstance {
-    $mode = $script:config.launch_mode
+    param(
+        [string]$targetMode = $null,
+        [string[]]$extraArgs = @()
+    )
+    
+    $mode = $targetMode
+    if ($null -eq $mode -or $mode -eq "") {
+        $mode = $script:config.launch_mode
+    }
+    
     $flashplayerExe = [System.IO.Path]::Combine($script:dir, "flashplayer.exe")
     $ruffleExe = [System.IO.Path]::Combine($script:dir, "ruffle.exe")
     
@@ -554,7 +563,11 @@ function Start-GameInstance {
         if ([System.IO.File]::Exists($flashplayerExe)) {
             try {
                 Log-Message "Launching game natively on http://127.0.0.1:$script:port/$swfName using Flash Player Projector..." "Gray"
-                $proc = Start-Process -FilePath $flashplayerExe -ArgumentList "http://127.0.0.1:$script:port/$swfName" -PassThru
+                $argsList = @("http://127.0.0.1:$script:port/$swfName")
+                if ($extraArgs.Count -gt 0) {
+                    $argsList += $extraArgs
+                }
+                $proc = Start-Process -FilePath $flashplayerExe -ArgumentList $argsList -PassThru
                 Log-Message "Flash Player Projector launched successfully." "Green"
             } catch {
                 Log-Message "Failed to start Flash Player Projector. Falling back to Ruffle..." "Yellow"
@@ -575,7 +588,11 @@ function Start-GameInstance {
                 $env:WGPU_BACKEND = $backend
                 
                 Log-Message "Launching game natively on http://127.0.0.1:$script:port/$swfName using graphics backend '$backend'..." "Gray"
-                $proc = Start-Process -FilePath $ruffleExe -ArgumentList "http://127.0.0.1:$script:port/$swfName", "-g", $backend -PassThru
+                $argsList = @("http://127.0.0.1:$script:port/$swfName", "-g", $backend)
+                if ($extraArgs.Count -gt 0) {
+                    $argsList += $extraArgs
+                }
+                $proc = Start-Process -FilePath $ruffleExe -ArgumentList $argsList -PassThru
                 Log-Message "Ruffle Desktop launched successfully." "Green"
             } catch {
                 Log-Message "Failed to start Ruffle Desktop. Falling back to web browser..." "Yellow"
@@ -652,7 +669,7 @@ function Execute-ConsoleCommand($inputStr) {
         "help" {
             Write-Host "Commands List:" -ForegroundColor White
             Write-Host "  help                 Display this help menu"
-            Write-Host "  launch               Launch a new instance of the game"
+            Write-Host "  launch [mode] [args] Launch a new instance of the game with optional custom args"
             Write-Host "  instances            List all active game instances"
             Write-Host "  close <id>           Close a specific game instance by its ID number"
             Write-Host "  logout               Send logout signal to all running client connections"
@@ -673,13 +690,33 @@ function Execute-ConsoleCommand($inputStr) {
             Write-Host "  shutdown             Stop server and exit launcher terminal"
         }
         "launch" {
-            $proc = Start-GameInstance
+            $targetMode = $null
+            $extraArgs = @()
+            if ($parts.Count -gt 1) {
+                $val = $parts[1].ToLower()
+                if ($val -in @("ask", "flashplayer", "ruffle", "browser", "auto", "converter")) {
+                    $targetMode = $val
+                    if ($parts.Count -gt 2) {
+                        $extraArgs = $parts[2..($parts.Count - 1)]
+                    }
+                } else {
+                    if ($parts.Count -gt 1) {
+                        $extraArgs = $parts[1..($parts.Count - 1)]
+                    }
+                }
+            }
+            
+            $proc = Start-GameInstance -targetMode $targetMode -extraArgs $extraArgs
             if ($proc) {
                 $global:instanceCount++
+                $actualMode = if ($targetMode) { $targetMode } else { $config.launch_mode }
+                if ($actualMode -eq "ask" -or $actualMode -eq "auto") {
+                    $actualMode = if ([System.IO.File]::Exists($ruffleExe)) { "ruffle" } else { "flashplayer" }
+                }
                 $inst = [PSCustomObject]@{
                     id = $global:instanceCount
                     process = $proc
-                    mode = $config.launch_mode
+                    mode = $actualMode
                     start_time = Get-Date -Format "HH:mm:ss"
                 }
                 $global:gameInstances += $inst
@@ -962,7 +999,7 @@ function Execute-ConsoleCommand($inputStr) {
 }
 
 # Launch initial game instance
-$firstProc = Start-GameInstance
+$firstProc = Start-GameInstance -targetMode $launchMode
 if ($firstProc) {
     $global:instanceCount++
     $firstInst = [PSCustomObject]@{
