@@ -4,5 +4,9 @@
     "ruffle_backend":  "dx12",
     "default_quality":  "medium",
     "disable_plat_purchase":  false,
-    "store_refresh_period_minutes":  60
+    "store_refresh_period_minutes":  60,
+    "audio_quality":  "high",
+    "multiplayer_mode":  "local",
+    "cpu_bot_enabled":  false,
+    "peer_target":  ""
 }

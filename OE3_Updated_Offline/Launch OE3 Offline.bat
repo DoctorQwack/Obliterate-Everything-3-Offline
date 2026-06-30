@@ -32,7 +32,7 @@ $global:gameInstances = @()
 $global:instanceCount = 0
 $global:cmdBuffer = ""
 $global:inConsoleMode = $false
-$global:version = "v0.7.1_Beta"
+$global:version = "v0.8.0_Beta"
 
 function Save-Config {
     $script:config | ConvertTo-Json | Out-File -FilePath $script:configPath -Force -Encoding utf8
@@ -355,6 +355,9 @@ if ($null -eq $config) {
         disable_plat_purchase = $false
         store_refresh_period_minutes = 60
         audio_quality = "standard"
+        multiplayer_mode = "local"
+        cpu_bot_enabled = $true
+        peer_target = ""
     }
 }
 
@@ -367,6 +370,9 @@ if ($null -eq $config.default_quality) { $config | Add-Member -MemberType NotePr
 if ($null -eq $config.disable_plat_purchase) { $config | Add-Member -MemberType NoteProperty -Name "disable_plat_purchase" -Value $false -Force; $configUpdated = $true }
 if ($null -eq $config.store_refresh_period_minutes) { $config | Add-Member -MemberType NoteProperty -Name "store_refresh_period_minutes" -Value 60 -Force; $configUpdated = $true }
 if ($null -eq $config.audio_quality) { $config | Add-Member -MemberType NoteProperty -Name "audio_quality" -Value "standard" -Force; $configUpdated = $true }
+if ($null -eq $config.multiplayer_mode) { $config | Add-Member -MemberType NoteProperty -Name "multiplayer_mode" -Value "local" -Force; $configUpdated = $true }
+if ($null -eq $config.cpu_bot_enabled) { $config | Add-Member -MemberType NoteProperty -Name "cpu_bot_enabled" -Value $true -Force; $configUpdated = $true }
+if ($null -eq $config.peer_target) { $config | Add-Member -MemberType NoteProperty -Name "peer_target" -Value "" -Force; $configUpdated = $true }
 
 if ($configUpdated) {
     Save-Config
@@ -707,6 +713,9 @@ function Execute-ConsoleCommand($inputStr) {
             Write-Host "  check-saves          Perform diagnostic integrity scan on all user saves"
             Write-Host "  converter            Open the Web legacy save converter in your browser"
             Write-Host "  diagnostics          Run server health diagnostics check"
+            Write-Host "  multiplayer <local|lan> Switch active multiplayer mode"
+            Write-Host "  cpu-bot <on/off>     Enable/disable simulated CPU opponent in matchmaking"
+            Write-Host "  peer <ip:port>       Set remote host target for P2P play (empty to clear)"
             Write-Host "  update [force]       Check and apply system updates in the background"
             Write-Host "  shutdown             Stop server and exit launcher terminal"
         }
@@ -1005,6 +1014,49 @@ function Execute-ConsoleCommand($inputStr) {
                 Write-Host "Error: update.ps1 not found in game directory." -ForegroundColor Red
             }
         }
+        "multiplayer" {
+            if ($parts.Count -lt 2) {
+                Write-Host "Current Multiplayer Mode: $($config.multiplayer_mode)" -ForegroundColor Cyan
+            } else {
+                $m = $parts[1].ToLower()
+                if ($m -in @("local", "lan")) {
+                    $config.multiplayer_mode = $m
+                    Save-Config
+                    Write-Host "Multiplayer mode set to '$m' in config.json." -ForegroundColor Green
+                } else {
+                    Write-Host "Invalid multiplayer mode choice. Choose: local, lan" -ForegroundColor Red
+                }
+            }
+        }
+        "cpu-bot" {
+            if ($parts.Count -lt 2) {
+                Write-Host "CPU Bot enabled: $($config.cpu_bot_enabled)" -ForegroundColor Cyan
+            } else {
+                $val = $parts[1].ToLower()
+                $enabled = $val -in @("on", "true", "enabled")
+                $config.cpu_bot_enabled = $enabled
+                Save-Config
+                $statusStr = if ($enabled) { "ENABLED" } else { "DISABLED" }
+                Write-Host "CPU Bot matchmaking is now $statusStr." -ForegroundColor Green
+            }
+        }
+        "peer" {
+            if ($parts.Count -lt 2) {
+                Write-Host "Current P2P Peer Target: '$($config.peer_target)'" -ForegroundColor Cyan
+            } else {
+                $target = $parts[1]
+                if ($target.ToLower() -in @("clear", "none", "off", "empty")) {
+                    $target = ""
+                }
+                $config.peer_target = $target
+                Save-Config
+                if ($target) {
+                    Write-Host "P2P Peer Target set to '$target' in config.json." -ForegroundColor Green
+                } else {
+                    Write-Host "P2P Peer Target cleared in config.json." -ForegroundColor Green
+                }
+            }
+        }
         "shutdown" {
             Write-Host "Shutting down HTTP server..." -ForegroundColor Red
             foreach ($inst in $global:gameInstances) {
@@ -1020,28 +1072,372 @@ function Execute-ConsoleCommand($inputStr) {
 }
 
 # Launch initial game instance
-$firstProc = Start-GameInstance -targetMode $launchMode
-if ($firstProc) {
-    $global:instanceCount++
-    $firstInst = [PSCustomObject]@{
-        id = $global:instanceCount
-        process = $firstProc
-        mode = $config.launch_mode
-        start_time = Get-Date -Format "HH:mm:ss"
+if ($args -contains "-nolaunch") {
+    Log-Message "NoLaunch mode active. Skipping initial game launch." "Yellow"
+} else {
+    $firstProc = Start-GameInstance -targetMode $launchMode
+    if ($firstProc) {
+        $global:instanceCount++
+        $firstInst = [PSCustomObject]@{
+            id = $global:instanceCount
+            process = $firstProc
+            mode = $config.launch_mode
+            start_time = Get-Date -Format "HH:mm:ss"
+        }
+        $global:gameInstances += $firstInst
+        Set-WindowTitle $firstProc "OE3 Instance $($firstInst.id)"
     }
-    $global:gameInstances += $firstInst
-    Set-WindowTitle $firstProc "OE3 Instance $($firstInst.id)"
 }
 
 Log-Message "Server is running. Press any key to open the interactive console." "Gray"
 Log-Message "Press Ctrl+C to force stop the server." "Gray"
 Log-Message ""
 
+# ================================================================================
+#                     MULTIPLAYER LOBBY & TICKS COORDINATOR (LAN / P2P)
+# ================================================================================
+$global:pendingRequests = [System.Collections.Generic.List[PSObject]]::new()
+$global:activeReadies = @{}
+$global:roomMoves = @{}
+
+function Update-PlayerStats($user, $won) {
+    $user_safe = [regex]::Replace($user, '[^a-zA-Z0-9_\-]', '')
+    if (-not $user_safe) { $user_safe = "GuestPlayer" }
+    
+    $savesDir = Join-Path $script:dir "saves"
+    $saveFile = Join-Path $savesDir "save_$user_safe.json"
+    if (-not (Test-Path $saveFile)) {
+        $saveFile = Join-Path $script:dir "save_$user_safe.json"
+    }
+    
+    if (Test-Path $saveFile) {
+        try {
+            $data = Get-Content -Raw $saveFile | ConvertFrom-Json
+            if ($null -eq $data.wins) { $data | Add-Member -MemberType NoteProperty -Name "wins" -Value 0 -Force }
+            if ($null -eq $data.losses) { $data | Add-Member -MemberType NoteProperty -Name "losses" -Value 0 -Force }
+            if ($null -eq $data.rating) { $data | Add-Member -MemberType NoteProperty -Name "rating" -Value 1000 -Force }
+            
+            if ($won) {
+                $data.wins = [int]$data.wins + 1
+                $data.rating = [int]$data.rating + 15
+            } else {
+                $data.losses = [int]$data.losses + 1
+                $data.rating = [int]$data.rating - 10
+                if ($data.rating -lt 1000) { $data.rating = 1000 }
+            }
+            
+            $body = $data | ConvertTo-Json -Depth 5 -Compress
+            [System.IO.File]::WriteAllText($saveFile, $body)
+            Log-Message "Updated rating stats for $user_safe : Won=$won, Rating=$($data.rating)" "Green"
+        } catch {
+            Log-Message "Error updating stats in save file: $_" "Red"
+        }
+    }
+}
+
+function Proxy-MultiplayerRequest($pending) {
+    $peer = $config.peer_target
+    if (-not $peer) { return $false }
+    
+    $url = "http://$peer/$($pending.Path)"
+    if ($pending.Request.Url.Query) {
+        $url += $pending.Request.Url.Query
+    }
+    
+    Log-Message "Proxying multiplayer request to peer: $($pending.Method) $url" "Cyan"
+    
+    try {
+        $httpReq = [System.Net.HttpWebRequest]::Create($url)
+        $httpReq.Method = $pending.Method
+        $httpReq.Timeout = 15000
+        
+        if ($pending.Method -eq 'POST' -and $pending.RawBody) {
+            $httpReq.ContentType = "application/json"
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($pending.RawBody)
+            $httpReq.ContentLength = $bytes.Length
+            $reqStream = $httpReq.GetRequestStream()
+            $reqStream.Write($bytes, 0, $bytes.Length)
+            $reqStream.Close()
+        }
+        
+        $httpRes = $httpReq.GetResponse()
+        $reader = New-Object System.IO.StreamReader($httpRes.GetResponseStream())
+        $resBody = $reader.ReadToEnd()
+        $reader.Close()
+        $httpRes.Close()
+        
+        if ($pending.Path -eq 'multiplayer/game/gameover') {
+            try {
+                $resData = $resBody | ConvertFrom-Json
+                if ($resData.status -eq 'ok') {
+                    $myResult = $resData.myResult
+                    $user = $pending.Request.QueryString["user"]
+                    if (-not $user -and $pending.RawBody) {
+                        $payload = $pending.RawBody | ConvertFrom-Json
+                        $user = $payload.user
+                    }
+                    Update-PlayerStats $user ($myResult -eq 1)
+                }
+            } catch {
+                Log-Message "Error updating local stats after proxy gameover: $_" "Red"
+            }
+        }
+        
+        $pending.Response.StatusCode = 200
+        $pending.Response.ContentType = "application/json"
+        $writer = New-Object System.IO.StreamWriter($pending.Response.OutputStream)
+        $writer.Write($resBody)
+        $writer.Close()
+        $pending.Response.Close()
+        return $true
+    } catch {
+        Log-Message "Failed to proxy to peer: $_" "Red"
+        $pending.Response.StatusCode = 502
+        $pending.Response.ContentType = "application/json"
+        $writer = New-Object System.IO.StreamWriter($pending.Response.OutputStream)
+        $writer.Write('{"status":"error","reason":"Peer server offline"}')
+        $writer.Close()
+        $pending.Response.Close()
+        return $true
+    }
+}
+
+function Process-PendingRequests {
+    $now = [DateTime]::UtcNow
+    
+    # 1. Matchmaking Requests
+    $matchReqs = $global:pendingRequests | Where-Object { $_.Path -eq 'multiplayer/match' }
+    if ($matchReqs -and $matchReqs.Count -ge 2) {
+        $p1 = $matchReqs[0]
+        $p2 = $matchReqs[1]
+        
+        $roomId = "room_$(Get-Random -Minimum 1000000 -Maximum 9999999)"
+        
+        # Respond to P1
+        $p1.Response.StatusCode = 200
+        $p1.Response.ContentType = "application/json"
+        $writer = New-Object System.IO.StreamWriter($p1.Response.OutputStream)
+        $writer.Write("{`"roomId`":`"$roomId`",`"role`":1}")
+        $writer.Close()
+        $p1.Response.Close()
+        $global:pendingRequests.Remove($p1) | Out-Null
+        
+        # Respond to P2
+        $p2.Response.StatusCode = 200
+        $p2.Response.ContentType = "application/json"
+        $writer = New-Object System.IO.StreamWriter($p2.Response.OutputStream)
+        $writer.Write("{`"roomId`":`"$roomId`",`"role`":2}")
+        $writer.Close()
+        $p2.Response.Close()
+        $global:pendingRequests.Remove($p2) | Out-Null
+        
+        Log-Message "Matchmaker: Paired $($p1.User) (P1) and $($p2.User) (P2) in room $roomId" "Green"
+    }
+    
+    # 2. Game Start Info Requests
+    $startReqs = $global:pendingRequests | Where-Object { $_.Path -eq 'multiplayer/game/start_info' }
+    if ($startReqs) {
+        $rooms = $startReqs | Group-Object { $_.RoomId }
+        foreach ($r in $rooms) {
+            if ($r.Count -ge 2) {
+                $p1 = $r.Group[0]
+                $p2 = $r.Group[1]
+                
+                $resp1 = @{
+                    role = 1
+                    player1 = @{ name = $p1.User; rating = $p1.Rating; armory = $p1.Armory }
+                    player2 = @{ name = $p2.User; rating = $p2.Rating; armory = $p2.Armory }
+                }
+                $resp2 = @{
+                    role = 2
+                    player1 = @{ name = $p1.User; rating = $p1.Rating; armory = $p1.Armory }
+                    player2 = @{ name = $p2.User; rating = $p2.Rating; armory = $p2.Armory }
+                }
+                
+                # Respond to P1
+                $p1.Response.StatusCode = 200
+                $p1.Response.ContentType = "application/json"
+                $writer = New-Object System.IO.StreamWriter($p1.Response.OutputStream)
+                $writer.Write(($resp1 | ConvertTo-Json -Depth 5 -Compress))
+                $writer.Close()
+                $p1.Response.Close()
+                $global:pendingRequests.Remove($p1) | Out-Null
+                
+                # Respond to P2
+                $p2.Response.StatusCode = 200
+                $p2.Response.ContentType = "application/json"
+                $writer = New-Object System.IO.StreamWriter($p2.Response.OutputStream)
+                $writer.Write(($resp2 | ConvertTo-Json -Depth 5 -Compress))
+                $writer.Close()
+                $p2.Response.Close()
+                $global:pendingRequests.Remove($p2) | Out-Null
+                
+                Log-Message "Room $($r.Name): Sent game start info to both players." "Green"
+            }
+        }
+    }
+    
+    # 3. Game Go Requests
+    $goReqs = $global:pendingRequests | Where-Object { $_.Path -eq 'multiplayer/game/go' }
+    if ($goReqs) {
+        $rooms = $goReqs | Group-Object { $_.RoomId }
+        foreach ($r in $rooms) {
+            if ($r.Count -ge 2) {
+                $p1 = $r.Group[0]
+                $p2 = $r.Group[1]
+                
+                $levelIndex = Get-Random -Minimum 0 -Maximum 5
+                
+                $body = @{ status = "ok"; levelIndex = $levelIndex } | ConvertTo-Json -Compress
+                
+                foreach ($req in @($p1, $p2)) {
+                    $req.Response.StatusCode = 200
+                    $req.Response.ContentType = "application/json"
+                    $writer = New-Object System.IO.StreamWriter($req.Response.OutputStream)
+                    $writer.Write($body)
+                    $writer.Close()
+                    $req.Response.Close()
+                    $global:pendingRequests.Remove($req) | Out-Null
+                }
+                Log-Message "Room $($r.Name): Game started with level index $levelIndex." "Green"
+            }
+        }
+    }
+    
+    # 4. Tick Sync Checkin Requests
+    $checkReqs = $global:pendingRequests | Where-Object { $_.Path -eq 'multiplayer/game/checkin' }
+    if ($checkReqs) {
+        $rooms = $checkReqs | Group-Object { $_.RoomId }
+        foreach ($r in $rooms) {
+            $roomId = $r.Name
+            
+            if (-not $global:roomMoves[$roomId]) {
+                $global:roomMoves[$roomId] = @{}
+            }
+            
+            $roomPlayers = @($r.Group | Select-Object -ExpandProperty User -Unique)
+            if ($roomPlayers.Count -lt 2) {
+                $roomPlayers = @($global:roomMoves[$roomId].Keys)
+            }
+            
+            if ($roomPlayers.Count -ge 2) {
+                $u1 = $roomPlayers[0]
+                $u2 = $roomPlayers[1]
+                
+                $m1 = $global:roomMoves[$roomId][$u1]
+                $m2 = $global:roomMoves[$roomId][$u2]
+                
+                if ($null -ne $m1 -and $null -ne $m2) {
+                    $maxTick = [Math]::Min($m1.Count, $m2.Count) - 1
+                    
+                    if ($maxTick -ge 0) {
+                        for ($t = 0; $t -le $maxTick; $t++) {
+                            $p1Req = $r.Group | Where-Object { $_.User -eq $u1 -and $_.TickIndex -eq $t } | Select-Object -First 1
+                            $p2Req = $r.Group | Where-Object { $_.User -eq $u2 -and $_.TickIndex -eq $t } | Select-Object -First 1
+                            
+                            if ($p1Req -and $p2Req) {
+                                $p1Moves = $m1[$t]
+                                $p2Moves = $m2[$t]
+                                
+                                $resp = @{
+                                    status = "ok"
+                                    clock = $t + 1
+                                    moves = @($p1Moves[0], $p1Moves[1], $p1Moves[2], $p2Moves[0], $p2Moves[1], $p2Moves[2])
+                                }
+                                $body = $resp | ConvertTo-Json -Compress
+                                
+                                foreach ($req in @($p1Req, $p2Req)) {
+                                    $req.Response.StatusCode = 200
+                                    $req.Response.ContentType = "application/json"
+                                    $writer = New-Object System.IO.StreamWriter($req.Response.OutputStream)
+                                    $writer.Write($body)
+                                    $writer.Close()
+                                    $req.Response.Close()
+                                    $global:pendingRequests.Remove($req) | Out-Null
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    # 5. Game Over Requests
+    $goReqs = $global:pendingRequests | Where-Object { $_.Path -eq 'multiplayer/game/gameover' }
+    if ($goReqs) {
+        $rooms = $goReqs | Group-Object { $_.RoomId }
+        foreach ($r in $rooms) {
+            if ($r.Count -ge 2) {
+                $p1 = $r.Group[0]
+                $p2 = $r.Group[1]
+                
+                $results = $p1.Results
+                $p1Alive = $results[0]
+                $p2Alive = $results[1]
+                
+                Update-PlayerStats $p1.User ($p1Alive -eq 1)
+                $p1.Response.StatusCode = 200
+                $p1.Response.ContentType = "application/json"
+                $writer = New-Object System.IO.StreamWriter($p1.Response.OutputStream)
+                $r1 = if ($p1Alive -eq 1) { 1 } else { 0 }
+                $writer.Write("{`"status`":`"ok`",`"myResult`":$r1}")
+                $writer.Close()
+                $p1.Response.Close()
+                $global:pendingRequests.Remove($p1) | Out-Null
+                
+                Update-PlayerStats $p2.User ($p2Alive -eq 1)
+                $p2.Response.StatusCode = 200
+                $p2.Response.ContentType = "application/json"
+                $writer = New-Object System.IO.StreamWriter($p2.Response.OutputStream)
+                $r2 = if ($p2Alive -eq 1) { 1 } else { 0 }
+                $writer.Write("{`"status`":`"ok`",`"myResult`":$r2}")
+                $writer.Close()
+                $p2.Response.Close()
+                $global:pendingRequests.Remove($p2) | Out-Null
+                
+                $roomId = $r.Name
+                $global:roomMoves.Remove($roomId) | Out-Null
+                Log-Message "Room $roomId : Match finalized and states cleared." "Green"
+            }
+        }
+    }
+    
+    # 6. Timeouts Cleanup
+    $timeouts = [System.Collections.Generic.List[PSObject]]::new()
+    foreach ($req in $global:pendingRequests) {
+        $age = ($now - $req.Time).TotalSeconds
+        $maxAge = if ($req.Path -eq 'multiplayer/game/checkin') { 15 } else { 25 }
+        if ($age -ge $maxAge) {
+            $timeouts.Add($req)
+        }
+    }
+    
+    foreach ($req in $timeouts) {
+        try {
+            $req.Response.StatusCode = 200
+            $req.Response.ContentType = "application/json"
+            $writer = New-Object System.IO.StreamWriter($req.Response.OutputStream)
+            if ($req.Path -eq 'multiplayer/game/checkin') {
+                $writer.Write('{"status":"aborted","reason":"timeout"}')
+            } else {
+                $writer.Write('{"status":"error","reason":"timeout"}')
+            }
+            $writer.Close()
+            $req.Response.Close()
+            Log-Message "Request timeout for path /$($req.Path) (User: $($req.User))" "Yellow"
+        } catch {}
+        $global:pendingRequests.Remove($req) | Out-Null
+    }
+}
+
 $contextAsync = $l.BeginGetContext($null, $null)
 
 while ($l.IsListening) {
     $res = $null
     try {
+        Process-PendingRequests
+        
         # Cooperative check for HTTP request (non-blocking)
         if ($contextAsync.IsCompleted) {
             $c = $l.EndGetContext($contextAsync)
@@ -1052,6 +1448,93 @@ while ($l.IsListening) {
             
             $p = $req.Url.LocalPath.TrimStart('/')
             
+            if ($p -like 'multiplayer/*') {
+                Log-Message "Queued multiplayer request: $($req.HttpMethod) /$p" "Cyan"
+                $pending = [PSCustomObject]@{
+                    Path = $p
+                    Method = $req.HttpMethod
+                    Context = $c
+                    Request = $req
+                    Response = $res
+                    Time = [DateTime]::UtcNow
+                    User = ""
+                    RoomId = ""
+                    Rating = 1000
+                    Armory = $null
+                    TickIndex = 0
+                    Results = $null
+                    RawBody = $null
+                }
+                
+                if ($config.peer_target) {
+                    if ($req.HttpMethod -eq 'POST') {
+                        $reader = New-Object System.IO.StreamReader($req.InputStream)
+                        $pending.RawBody = $reader.ReadToEnd()
+                        $reader.Close()
+                    }
+                    Proxy-MultiplayerRequest $pending | Out-Null
+                    continue
+                }
+                
+                if ($p -eq 'multiplayer/match') {
+                    $pending.User = $req.QueryString["user"]
+                    $r = $req.QueryString["rating"]
+                    $pending.Rating = if ($null -ne $r) { [int]$r } else { 1000 }
+                } elseif ($p -eq 'multiplayer/game/start_info') {
+                    $reader = New-Object System.IO.StreamReader($req.InputStream)
+                    $pending.RawBody = $reader.ReadToEnd()
+                    $reader.Close()
+                    $payload = $pending.RawBody | ConvertFrom-Json
+                    $pending.User = $payload.user
+                    $pending.RoomId = $payload.roomId
+                    $r = $payload.rating
+                    $pending.Rating = if ($null -ne $r) { [int]$r } else { 1000 }
+                    $pending.Armory = $payload.armory
+                } elseif ($p -eq 'multiplayer/game/ready') {
+                    $pending.User = $req.QueryString["user"]
+                    $pending.RoomId = $req.QueryString["roomId"]
+                    
+                    $global:activeReadies[$pending.RoomId + "_" + $pending.User] = $true
+                    $res.StatusCode = 200
+                    $res.ContentType = "application/json"
+                    $writer = New-Object System.IO.StreamWriter($res.OutputStream)
+                    $writer.Write('{"status":"ok"}')
+                    $writer.Close()
+                    $res.Close()
+                    continue
+                } elseif ($p -eq 'multiplayer/game/go') {
+                    $pending.User = $req.QueryString["user"]
+                    $pending.RoomId = $req.QueryString["roomId"]
+                } elseif ($p -eq 'multiplayer/game/checkin') {
+                    $reader = New-Object System.IO.StreamReader($req.InputStream)
+                    $pending.RawBody = $reader.ReadToEnd()
+                    $reader.Close()
+                    $payload = $pending.RawBody | ConvertFrom-Json
+                    $pending.User = $payload.user
+                    $pending.RoomId = $payload.roomId
+                    
+                    if (-not $global:roomMoves[$pending.RoomId]) {
+                        $global:roomMoves[$pending.RoomId] = @{}
+                    }
+                    if (-not $global:roomMoves[$pending.RoomId][$pending.User]) {
+                        $global:roomMoves[$pending.RoomId][$pending.User] = [System.Collections.Generic.List[PSObject]]::new()
+                    }
+                    $global:roomMoves[$pending.RoomId][$pending.User].Add(@([int]$payload.move0, [int]$payload.move1, [int]$payload.move2, [int]$payload.hash)) | Out-Null
+                    $pending.TickIndex = $global:roomMoves[$pending.RoomId][$pending.User].Count - 1
+                } elseif ($p -eq 'multiplayer/game/gameover') {
+                    $reader = New-Object System.IO.StreamReader($req.InputStream)
+                    $pending.RawBody = $reader.ReadToEnd()
+                    $reader.Close()
+                    $payload = $pending.RawBody | ConvertFrom-Json
+                    $pending.User = $payload.user
+                    $pending.RoomId = $payload.roomId
+                    $pending.Results = $payload.results
+                }
+                
+                $global:pendingRequests.Add($pending) | Out-Null
+                continue
+            }
+            
             if ($p -eq 'config' -and $req.HttpMethod -eq 'GET') {
                 $cfgData = @{
                     launch_mode = $config.launch_mode
@@ -1060,6 +1543,9 @@ while ($l.IsListening) {
                     default_quality = $config.default_quality
                     disable_plat_purchase = $config.disable_plat_purchase
                     store_refresh_period_minutes = $config.store_refresh_period_minutes
+                    multiplayer_mode = $config.multiplayer_mode
+                    cpu_bot_enabled = $config.cpu_bot_enabled
+                    peer_target = $config.peer_target
                     force_vault_refresh = $global:forceVaultRefresh
                     force_logout = $global:forceLogout
                 }
@@ -1315,40 +1801,42 @@ while ($l.IsListening) {
         }
         
         # Check for console key input
-        if ([Console]::KeyAvailable) {
-            $keyInfo = [Console]::ReadKey($true)
-            if (-not $global:inConsoleMode) {
-                $global:inConsoleMode = $true
-                $global:cmdBuffer = ""
-                Write-Host ""
-                Write-Host "====================================================" -ForegroundColor Yellow
-                Write-Host "         LAUNCHER INTERACTIVE CONSOLE               " -ForegroundColor Yellow
-                Write-Host "====================================================" -ForegroundColor Yellow
-                Write-Host " Type 'help' to see commands, or 'exit' to close console." -ForegroundColor Cyan
-                Write-Host "====================================================" -ForegroundColor Yellow
-                Write-Host "Console> " -NoNewline
-            } else {
-                if ($keyInfo.Key -eq [System.ConsoleKey]::Enter) {
-                    Write-Host ""
-                    Execute-ConsoleCommand $global:cmdBuffer
+        try {
+            if ([Console]::KeyAvailable) {
+                $keyInfo = [Console]::ReadKey($true)
+                if (-not $global:inConsoleMode) {
+                    $global:inConsoleMode = $true
                     $global:cmdBuffer = ""
-                    if ($global:inConsoleMode) {
-                        Write-Host "Console> " -NoNewline
-                    }
-                } elseif ($keyInfo.Key -eq [System.ConsoleKey]::Backspace) {
-                    if ($global:cmdBuffer.Length -gt 0) {
-                        $global:cmdBuffer = $global:cmdBuffer.Substring(0, $global:cmdBuffer.Length - 1)
-                        Write-Host "`b `b" -NoNewline
-                    }
+                    Write-Host ""
+                    Write-Host "====================================================" -ForegroundColor Yellow
+                    Write-Host "         LAUNCHER INTERACTIVE CONSOLE               " -ForegroundColor Yellow
+                    Write-Host "====================================================" -ForegroundColor Yellow
+                    Write-Host " Type 'help' to see commands, or 'exit' to close console." -ForegroundColor Cyan
+                    Write-Host "====================================================" -ForegroundColor Yellow
+                    Write-Host "Console> " -NoNewline
                 } else {
-                    $char = $keyInfo.KeyChar
-                    if ($char) {
-                        $global:cmdBuffer += $char
-                        Write-Host $char -NoNewline
+                    if ($keyInfo.Key -eq [System.ConsoleKey]::Enter) {
+                        Write-Host ""
+                        Execute-ConsoleCommand $global:cmdBuffer
+                        $global:cmdBuffer = ""
+                        if ($global:inConsoleMode) {
+                            Write-Host "Console> " -NoNewline
+                        }
+                    } elseif ($keyInfo.Key -eq [System.ConsoleKey]::Backspace) {
+                        if ($global:cmdBuffer.Length -gt 0) {
+                            $global:cmdBuffer = $global:cmdBuffer.Substring(0, $global:cmdBuffer.Length - 1)
+                            Write-Host "`b `b" -NoNewline
+                        }
+                    } else {
+                        $char = $keyInfo.KeyChar
+                        if ($char) {
+                            $global:cmdBuffer += $char
+                            Write-Host $char -NoNewline
+                        }
                     }
                 }
             }
-        }
+        } catch {}
         
         Start-Sleep -Milliseconds 50
     } catch {
@@ -1359,3 +1847,4 @@ while ($l.IsListening) {
         Start-Sleep -Milliseconds 50
     }
 }
+

@@ -20,6 +20,10 @@ package playerio {
 		private var _packs:Array;  // Array of Pack Objects: { name: String, price: int, items: Array of Array of 4 ints }
 		
 		private var _connections:Array;
+		private var _matcherConnection:LocalConnection = null;
+		private var _gameConnection:LocalConnection = null;
+		private var _myPlayerId:int = 1;
+		private var _currentRoomId:String = "";
 
 		private var _vaultHour:int = 0;
 		private var _vaultMinute:int = 0;
@@ -110,6 +114,7 @@ package playerio {
 			// 4. Initialize dynamic Guest profile by default
 			_player = createNewProfile("GuestPlayer");
 			
+			loadConfig();
 			// Start periodic config polling and time-based vault refreshes
 			setInterval(tickServer, 10000);
 		}
@@ -357,47 +362,58 @@ package playerio {
 		public function handleClientJoin(connection:LocalConnection, joinData:Object):void {
 			_connections.push(connection);
 			
+			var isLan:Boolean = (_config && _config.multiplayer_mode == "lan");
+			var cpuBotEnabled:Boolean = (!_config || _config.cpu_bot_enabled != false);
+			
 			// Trigger local server join logic
 			if (connection.roomType == "Service") {
 				// Instant service connection handler
 			} else if (connection.roomType == "Matcher") {
-				// In matchmaking, instantly return a match room
-				var msg:LocalMessage = new LocalMessage("mgo");
-				msg.add("localGameRoom_" + Math.floor(MathRandom() * 1000));
-				connection.receiveFromServer(msg);
+				if (isLan || !cpuBotEnabled) {
+					runLanMatchmaking(connection);
+				} else {
+					// In matchmaking, instantly return a match room
+					var msg:LocalMessage = new LocalMessage("mgo");
+					msg.add("localGameRoom_" + Math.floor(MathRandom() * 1000));
+					connection.receiveFromServer(msg);
+				}
 			} else if (connection.roomType == "Game") {
-				// Instantly start multiplayer room simulator
-				var ginit:LocalMessage = new LocalMessage("ginit");
-				ginit.add(1); // My Player ID
-				connection.receiveFromServer(ginit);
+				if (isLan || !cpuBotEnabled) {
+					runLanGameJoin(connection);
+				} else {
+					// Instantly start multiplayer room simulator
+					var ginit:LocalMessage = new LocalMessage("ginit");
+					ginit.add(1); // My Player ID
+					connection.receiveFromServer(ginit);
 
-				// Send Player stats (names and ratings)
-				var grstats:LocalMessage = new LocalMessage("grstats");
-				grstats.add(_player.callsign);
-				grstats.add(_player.rating);
-				grstats.add("CPU Bot");
-				grstats.add(1000);
-				connection.receiveFromServer(grstats);
+					// Send Player stats (names and ratings)
+					var grstats:LocalMessage = new LocalMessage("grstats");
+					grstats.add(_player.callsign);
+					grstats.add(_player.rating);
+					grstats.add("CPU Bot");
+					grstats.add(1000);
+					connection.receiveFromServer(grstats);
 
-				// Send armory configuration to match game load expectations
-				var grarmory:LocalMessage = new LocalMessage("grarmory");
-				var i:int, j:int;
-				// Send our equipped armory items
-				for (i = 0; i < 21; i++) {
-					var armIndex:int = _player.equip[i];
-					var item:Array = (armIndex >= 0 && armIndex < _player.armory.length) ? _player.armory[armIndex] : [-1, -1, -1, -1];
-					for (j = 0; j < 4; j++) {
-						grarmory.add(item[j]);
+					// Send armory configuration to match game load expectations
+					var grarmory:LocalMessage = new LocalMessage("grarmory");
+					var i:int, j:int;
+					// Send our equipped armory items
+					for (i = 0; i < 21; i++) {
+						var armIndex:int = _player.equip[i];
+						var item:Array = (armIndex >= 0 && armIndex < _player.armory.length) ? _player.armory[armIndex] : [-1, -1, -1, -1];
+						for (j = 0; j < 4; j++) {
+							grarmory.add(item[j]);
+						}
 					}
-				}
-				// Send CPU equipped items (filler items)
-				for (i = 0; i < 21; i++) {
-					var botItem:Array = [100 + (i % 3), -1, -1, -1];
-					for (j = 0; j < 4; j++) {
-						grarmory.add(botItem[j]);
+					// Send CPU equipped items (filler items)
+					for (i = 0; i < 21; i++) {
+						var botItem:Array = [100 + (i % 3), -1, -1, -1];
+						for (j = 0; j < 4; j++) {
+							grarmory.add(botItem[j]);
+						}
 					}
+					connection.receiveFromServer(grarmory);
 				}
-				connection.receiveFromServer(grarmory);
 			}
 		}
 
@@ -717,55 +733,79 @@ package playerio {
 						break;
 				}
 			} else if (connection.roomType == "Game") {
-				switch (type) {
-					case "glogin":
-						// Re-send status and start triggers for multiplayer sync
-						var ggo:LocalMessage = new LocalMessage("ggo");
-						ggo.add(Math.floor(MathRandom() * 5)); // Random level index
-						connection.receiveFromServer(ggo);
-						break;
+				var isLan:Boolean = (_config && _config.multiplayer_mode == "lan");
+				var cpuBotEnabled:Boolean = (!_config || _config.cpu_bot_enabled != false);
+				
+				if (isLan || !cpuBotEnabled) {
+					switch (type) {
+						case "glogin":
+							// Wait for client to process start info and send gready
+							break;
+						case "gready":
+							runLanGameReady(connection);
+							break;
+						case "gcheckin":
+							runLanGameCheckin(connection, message.getInt(0), message.getInt(1), message.getInt(2), message.getInt(3));
+							break;
+						case "ggameover":
+							var resultsList:Array = [];
+							for (i = 0; i < message.length; i++) {
+								resultsList.push(message.getInt(i));
+							}
+							runLanGameOver(connection, resultsList);
+							break;
+					}
+				} else {
+					switch (type) {
+						case "glogin":
+							// Re-send status and start triggers for multiplayer sync
+							var ggo:LocalMessage = new LocalMessage("ggo");
+							ggo.add(Math.floor(MathRandom() * 5)); // Random level index
+							connection.receiveFromServer(ggo);
+							break;
 
-					case "gcheckin":
-						// Echo moves back to simulate network updates in multiplayer loop
-						var move0:int = message.getInt(0);
-						var move1:int = message.getInt(1);
-						var move2:int = message.getInt(2);
-						var hash:int = message.getInt(3);
-						
-						var gupdate:LocalMessage = new LocalMessage("gupdate");
-						gupdate.add(1); // increment clock
-						gupdate.add(move0);
-						gupdate.add(move1);
-						gupdate.add(move2);
-						// Bot's dummy moves
-						gupdate.add(0);
-						gupdate.add(0);
-						gupdate.add(0);
-						connection.receiveFromServer(gupdate);
-						break;
+						case "gcheckin":
+							// Echo moves back to simulate network updates in multiplayer loop
+							var move0:int = message.getInt(0);
+							var move1:int = message.getInt(1);
+							var move2:int = message.getInt(2);
+							var hash:int = message.getInt(3);
+							
+							var gupdate:LocalMessage = new LocalMessage("gupdate");
+							gupdate.add(1); // increment clock
+							gupdate.add(move0);
+							gupdate.add(move1);
+							gupdate.add(move2);
+							// Bot's dummy moves
+							gupdate.add(0);
+							gupdate.add(0);
+							gupdate.add(0);
+							connection.receiveFromServer(gupdate);
+							break;
 
-					case "ggameover":
-						// Send end game results
-						var resultsList:Array = [];
-						for (i = 0; i < message.length; i++) {
-							resultsList.push(message.getInt(i));
-						}
-						var myResult:int = resultsList[0]; // Victory = 1
+						case "ggameover":
+							// Send end game results
+							var offlineResultsList:Array = [];
+							for (i = 0; i < message.length; i++) {
+								offlineResultsList.push(message.getInt(i));
+							}
+							var myResult:int = offlineResultsList[0]; // Victory = 1
 
-						if (_player.rating < 1000) _player.rating = 1000;
-						if (myResult == 1) {
-							_player.wins += 1;
-							_player.rating += 15;
-						} else {
-							_player.losses += 1;
-							_player.rating -= 10;
-						}
-						saveProfile();
+							if (_player.rating < 1000) _player.rating = 1000;
+							if (myResult == 1) {
+								_player.wins += 1;
+								_player.rating += 15;
+							} else {
+								_player.losses += 1;
+								_player.rating -= 10;
+							}
+							saveProfile();
 
-						var gresult:LocalMessage = new LocalMessage("gresult");
-						gresult.add(myResult);
-						connection.receiveFromServer(gresult);
-						break;
+							var gresult:LocalMessage = new LocalMessage("gresult");
+							gresult.add(myResult);
+							connection.receiveFromServer(gresult);
+							break;
+					}
 				}
 			}
 		}
@@ -1338,6 +1378,243 @@ package playerio {
 					reward[2] = -1;
 					reward[3] = -1;
 				}
+			}
+		}
+
+		private function runLanMatchmaking(connection:LocalConnection):void {
+			_matcherConnection = connection;
+			logToServer("Starting LAN matchmaking for " + _player.callsign, "INFO");
+			try {
+				var url:String = "/multiplayer/match?user=" + encodeURIComponent(_player.callsign) + "&rating=" + _player.rating;
+				var request:URLRequest = new URLRequest(url);
+				var loader:URLLoader = new URLLoader();
+				loader.addEventListener(Event.COMPLETE, function(e:Event):void {
+					try {
+						var res:Object = parseJSON(loader.data);
+						if (res && res.roomId) {
+							_currentRoomId = res.roomId;
+							_myPlayerId = res.role;
+							logToServer("Match found! Room: " + _currentRoomId + " | Role: " + _myPlayerId, "INFO");
+							
+							var msg:LocalMessage = new LocalMessage("mgo");
+							msg.add(_currentRoomId);
+							connection.receiveFromServer(msg);
+						} else {
+							logToServer("Invalid matchmaker response.", "ERROR");
+						}
+					} catch (err:Error) {
+						logToServer("Error parsing matchmaking response: " + err.message, "ERROR");
+					}
+				});
+				loader.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent):void {
+					logToServer("Matchmaking request failed.", "ERROR");
+				});
+				loader.load(request);
+			} catch (e:Error) {
+				logToServer("Error starting matchmaking: " + e.message, "ERROR");
+			}
+		}
+
+		private function runLanGameJoin(connection:LocalConnection):void {
+			_gameConnection = connection;
+			_currentRoomId = connection.roomId;
+			logToServer("Joining LAN Game Room: " + _currentRoomId, "INFO");
+			
+			var equippedArmory:Array = [];
+			for (var i:int = 0; i < 21; i++) {
+				var armIndex:int = _player.equip[i];
+				var item:Array = (armIndex >= 0 && armIndex < _player.armory.length) ? _player.armory[armIndex] : [-1, -1, -1, -1];
+				for (var j:int = 0; j < 4; j++) {
+					equippedArmory.push(item[j]);
+				}
+			}
+			
+			var payload:Object = {
+				"roomId": _currentRoomId,
+				"user": _player.callsign,
+				"rating": _player.rating,
+				"armory": equippedArmory
+			};
+			
+			try {
+				var url:String = "/multiplayer/game/start_info";
+				var request:URLRequest = new URLRequest(url);
+				request.method = URLRequestMethod.POST;
+				request.data = stringifyJSON(payload);
+				request.contentType = "application/json";
+				
+				var loader:URLLoader = new URLLoader();
+				loader.addEventListener(Event.COMPLETE, function(e:Event):void {
+					try {
+						var res:Object = parseJSON(loader.data);
+						if (res && res.player1) {
+							_myPlayerId = res.role;
+							
+							var ginit:LocalMessage = new LocalMessage("ginit");
+							ginit.add(_myPlayerId);
+							connection.receiveFromServer(ginit);
+							
+							var grstats:LocalMessage = new LocalMessage("grstats");
+							grstats.add(res.player1.name);
+							grstats.add(res.player1.rating);
+							grstats.add(res.player2.name);
+							grstats.add(res.player2.rating);
+							connection.receiveFromServer(grstats);
+							
+							var grarmory:LocalMessage = new LocalMessage("grarmory");
+							var k:int;
+							for (k = 0; k < res.player1.armory.length; k++) {
+								grarmory.add(res.player1.armory[k]);
+							}
+							for (k = 0; k < res.player2.armory.length; k++) {
+								grarmory.add(res.player2.armory[k]);
+							}
+							connection.receiveFromServer(grarmory);
+							
+							logToServer("Game start info received. Role: " + _myPlayerId, "INFO");
+						} else {
+							logToServer("Invalid start_info response.", "ERROR");
+						}
+					} catch (err:Error) {
+						logToServer("Error parsing game start info: " + err.message, "ERROR");
+					}
+				});
+				loader.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent):void {
+					logToServer("Failed to fetch game start info.", "ERROR");
+				});
+				loader.load(request);
+			} catch (e:Error) {
+				logToServer("Error joining game: " + e.message, "ERROR");
+			}
+		}
+
+		private function runLanGameLogin(connection:LocalConnection):void {
+			logToServer("Sending glogin to server for: " + _player.callsign, "INFO");
+			try {
+				var url:String = "/multiplayer/game/go?roomId=" + encodeURIComponent(_currentRoomId) + "&user=" + encodeURIComponent(_player.callsign);
+				var request:URLRequest = new URLRequest(url);
+				var loader:URLLoader = new URLLoader();
+				loader.addEventListener(Event.COMPLETE, function(e:Event):void {
+					try {
+						var res:Object = parseJSON(loader.data);
+						if (res && res.status == "ok") {
+							var ggo:LocalMessage = new LocalMessage("ggo");
+							ggo.add(res.levelIndex);
+							connection.receiveFromServer(ggo);
+							logToServer("Game started with level index: " + res.levelIndex, "INFO");
+						} else {
+							logToServer("Failed to start game: " + (res ? res.reason : "unknown"), "ERROR");
+						}
+					} catch (err:Error) {
+						logToServer("Error parsing game go response: " + err.message, "ERROR");
+					}
+				});
+				loader.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent):void {
+					logToServer("Game go request failed.", "ERROR");
+				});
+				loader.load(request);
+			} catch (e:Error) {
+				logToServer("Error sending game login: " + e.message, "ERROR");
+			}
+		}
+
+		private function runLanGameReady(connection:LocalConnection):void {
+			try {
+				var url:String = "/multiplayer/game/ready?roomId=" + encodeURIComponent(_currentRoomId) + "&user=" + encodeURIComponent(_player.callsign);
+				var request:URLRequest = new URLRequest(url);
+				request.method = URLRequestMethod.POST;
+				var loader:URLLoader = new URLLoader();
+				loader.addEventListener(Event.COMPLETE, function(e:Event):void {
+					runLanGameLogin(connection);
+				});
+				loader.load(request);
+				logToServer("Sent gready to server.", "INFO");
+			} catch (e:Error) {
+				logToServer("Error sending gready: " + e.message, "ERROR");
+			}
+		}
+
+		private function runLanGameCheckin(connection:LocalConnection, move0:int, move1:int, move2:int, hash:int):void {
+			var payload:Object = {
+				"roomId": _currentRoomId,
+				"user": _player.callsign,
+				"move0": move0,
+				"move1": move1,
+				"move2": move2,
+				"hash": hash
+			};
+			
+			try {
+				var url:String = "/multiplayer/game/checkin";
+				var request:URLRequest = new URLRequest(url);
+				request.method = URLRequestMethod.POST;
+				request.data = stringifyJSON(payload);
+				request.contentType = "application/json";
+				
+				var loader:URLLoader = new URLLoader();
+				loader.addEventListener(Event.COMPLETE, function(e:Event):void {
+					try {
+						var res:Object = parseJSON(loader.data);
+						if (res && res.status == "ok") {
+							var gupdate:LocalMessage = new LocalMessage("gupdate");
+							gupdate.add(res.clock);
+							for (var mIdx:int = 0; mIdx < res.moves.length; mIdx++) {
+								gupdate.add(res.moves[mIdx]);
+							}
+							connection.receiveFromServer(gupdate);
+						} else if (res && res.status == "aborted") {
+							logToServer("Match aborted: peer left.", "WARNING");
+							var gleft:LocalMessage = new LocalMessage("gleft");
+							gleft.add(3 - _myPlayerId);
+							connection.receiveFromServer(gleft);
+						}
+					} catch (err:Error) {
+						logToServer("Error parsing checkin response: " + err.message, "ERROR");
+					}
+				});
+				loader.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent):void {
+					logToServer("Check-in request failed.", "ERROR");
+				});
+				loader.load(request);
+			} catch (e:Error) {
+				logToServer("Error sending check-in: " + e.message, "ERROR");
+			}
+		}
+
+		private function runLanGameOver(connection:LocalConnection, resultsList:Array):void {
+			var payload:Object = {
+				"roomId": _currentRoomId,
+				"user": _player.callsign,
+				"results": resultsList
+			};
+			
+			try {
+				var url:String = "/multiplayer/game/gameover";
+				var request:URLRequest = new URLRequest(url);
+				request.method = URLRequestMethod.POST;
+				request.data = stringifyJSON(payload);
+				request.contentType = "application/json";
+				
+				var loader:URLLoader = new URLLoader();
+				loader.addEventListener(Event.COMPLETE, function(e:Event):void {
+					try {
+						var res:Object = parseJSON(loader.data);
+						if (res && res.status == "ok") {
+							var gresult:LocalMessage = new LocalMessage("gresult");
+							gresult.add(res.myResult);
+							connection.receiveFromServer(gresult);
+							logToServer("Game over handled. Result: " + (res.myResult == 1 ? "Win" : "Loss"), "INFO");
+						}
+					} catch (err:Error) {
+						logToServer("Error parsing game over response: " + err.message, "ERROR");
+					}
+				});
+				loader.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent):void {
+					logToServer("Game over request failed.", "ERROR");
+				});
+				loader.load(request);
+			} catch (e:Error) {
+				logToServer("Error sending game over: " + e.message, "ERROR");
 			}
 		}
 	}

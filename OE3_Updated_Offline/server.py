@@ -15,12 +15,13 @@ import threading
 import subprocess
 import webbrowser
 import shutil
+import random
 
 # Determine working directory
 DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Global states
-VERSION = "v0.7.1_Beta"
+VERSION = "v0.8.0_Beta"
 port = 8765
 force_vault_refresh = False
 force_logout = False
@@ -77,7 +78,10 @@ config = {
     "default_quality": "medium",
     "disable_plat_purchase": False,
     "store_refresh_period_minutes": 60,
-    "audio_quality": "standard"
+    "audio_quality": "standard",
+    "multiplayer_mode": "local",
+    "cpu_bot_enabled": True,
+    "peer_target": ""
 }
 
 def load_config():
@@ -113,7 +117,16 @@ class OE3HTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         path = parsed_url.path.lstrip('/')
         query = urllib.parse.parse_qs(parsed_url.query)
         
-        if path == 'config':
+        if path.startswith('multiplayer/'):
+            if handle_multiplayer_proxy(self, path, 'GET', query):
+                return
+            if path == 'multiplayer/match':
+                handle_multiplayer_match(self, query)
+            elif path == 'multiplayer/game/go':
+                handle_game_go(self, query)
+            else:
+                self.send_error(404, "Not Found")
+        elif path == 'config':
             self.handle_get_config()
         elif path == 'load':
             self.handle_get_load(query)
@@ -127,7 +140,29 @@ class OE3HTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         path = parsed_url.path.lstrip('/')
         query = urllib.parse.parse_qs(parsed_url.query)
         
-        if path == 'save':
+        if path.startswith('multiplayer/'):
+            content_length = int(self.headers.get('Content-Length', 0))
+            body_data = self.rfile.read(content_length) if content_length > 0 else b''
+            
+            if handle_multiplayer_proxy(self, path, 'POST', query, body_data):
+                return
+                
+            try:
+                body_json = json.loads(body_data.decode('utf-8')) if body_data else {}
+            except Exception:
+                body_json = {}
+                
+            if path == 'multiplayer/game/start_info':
+                handle_game_start_info(self, body_json)
+            elif path == 'multiplayer/game/ready':
+                handle_game_ready(self, query)
+            elif path == 'multiplayer/game/checkin':
+                handle_game_checkin(self, body_json)
+            elif path == 'multiplayer/game/gameover':
+                handle_game_gameover(self, body_json)
+            else:
+                self.send_error(404, "Not Found")
+        elif path == 'save':
             self.handle_post_save(query)
         elif path == 'log':
             self.handle_post_log()
@@ -154,6 +189,9 @@ class OE3HTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             "disable_plat_purchase": config["disable_plat_purchase"],
             "store_refresh_period_minutes": config["store_refresh_period_minutes"],
             "audio_quality": config.get("audio_quality", "standard"),
+            "multiplayer_mode": config.get("multiplayer_mode", "local"),
+            "cpu_bot_enabled": config.get("cpu_bot_enabled", True),
+            "peer_target": config.get("peer_target", ""),
             "force_vault_refresh": force_vault_refresh,
             "force_logout": force_logout
         }
@@ -642,6 +680,9 @@ def execute_command(input_str):
         print("  saves                Open local saves folder", flush=True)
         print("  check-saves          Perform diagnostic integrity scan on all user saves", flush=True)
         print("  diagnostics          Run server health diagnostics check", flush=True)
+        print("  multiplayer <local|lan> Switch active multiplayer mode", flush=True)
+        print("  cpu-bot <on|off>     Enable/disable simulated CPU opponent in matchmaking", flush=True)
+        print("  peer <ip:port>       Set remote host target for P2P play (empty to clear)", flush=True)
         print("  update [force]       Check and apply system updates in the background", flush=True)
         print("  shutdown             Stop server and exit launcher terminal", flush=True)
         
@@ -830,6 +871,43 @@ def execute_command(input_str):
         else:
             print(f"{Colors.FAIL}Error: update.py not found in game directory.{Colors.ENDC}", flush=True)
             
+    elif action == "multiplayer":
+        if len(parts) < 2:
+            print(f"Current Multiplayer Mode: {config.get('multiplayer_mode', 'local')}", flush=True)
+        else:
+            m = parts[1].lower()
+            if m in ("local", "lan"):
+                config["multiplayer_mode"] = m
+                save_config()
+                print(f"{Colors.GREEN}Multiplayer mode set to '{m}' in config.json.{Colors.ENDC}", flush=True)
+            else:
+                print(f"{Colors.FAIL}Invalid multiplayer mode choice. Choose: local, lan{Colors.ENDC}", flush=True)
+                
+    elif action == "cpu-bot":
+        if len(parts) < 2:
+            print(f"CPU Bot enabled: {config.get('cpu_bot_enabled', True)}", flush=True)
+        else:
+            val = parts[1].lower()
+            enabled = val in ("on", "true", "enabled")
+            config["cpu_bot_enabled"] = enabled
+            save_config()
+            status_str = "ENABLED" if enabled else "DISABLED"
+            print(f"{Colors.GREEN}CPU Bot matchmaking is now {status_str}.{Colors.ENDC}", flush=True)
+            
+    elif action == "peer":
+        if len(parts) < 2:
+            print(f"Current P2P Peer Target: '{config.get('peer_target', '')}'", flush=True)
+        else:
+            target = parts[1]
+            if target.lower() in ("clear", "none", "off", "empty"):
+                target = ""
+            config["peer_target"] = target
+            save_config()
+            if target:
+                print(f"{Colors.GREEN}P2P Peer Target set to '{target}' in config.json.{Colors.ENDC}", flush=True)
+            else:
+                print(f"{Colors.GREEN}P2P Peer Target cleared in config.json.{Colors.ENDC}", flush=True)
+                
     elif action == "shutdown":
         shutdown_server()
         
@@ -960,7 +1038,7 @@ def main():
         current_port = port + i
         log_message(f"Checking port conflict for port {current_port}...", "gray")
         try:
-            httpd = socketserver.TCPServer(("127.0.0.1", current_port), OE3HTTPRequestHandler)
+            httpd = socketserver.ThreadingTCPServer(("127.0.0.1", current_port), OE3HTTPRequestHandler)
             port = current_port
             break
         except OSError:
@@ -1001,6 +1079,333 @@ def main():
         except (KeyboardInterrupt, EOFError):
             execute_command("shutdown")
             break
+
+# ================================================================================
+#                     MULTIPLAYER LOBBY & TICKS COORDINATOR (LAN / P2P)
+# ================================================================================
+import urllib.request
+
+mp_lock = threading.Lock()
+match_queue = []
+active_rooms = {}
+
+def update_player_stats(user, won):
+    user_safe = re.sub(r'[^a-zA-Z0-9_\-]', '', user)
+    if not user_safe:
+        user_safe = "GuestPlayer"
+        
+    saves_dir = os.path.join(DIR, "saves")
+    save_file = os.path.join(saves_dir, f"save_{user_safe}.json")
+    
+    if not os.path.exists(save_file):
+        save_file = os.path.join(DIR, f"save_{user_safe}.json")
+        
+    if os.path.exists(save_file):
+        try:
+            with open(save_file, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+                
+            if "wins" not in data: data["wins"] = 0
+            if "losses" not in data: data["losses"] = 0
+            if "rating" not in data: data["rating"] = 1000
+            
+            if won:
+                data["wins"] += 1
+                data["rating"] += 15
+            else:
+                data["losses"] += 1
+                data["rating"] -= 10
+                if data["rating"] < 1000:
+                    data["rating"] = 1000
+                    
+            with open(save_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+                
+            log_message(f"Updated rating stats for {user_safe}: Won={won}, Rating={data['rating']}", "green")
+        except Exception as e:
+            log_message(f"Error updating stats in save file: {e}", "red")
+
+def handle_multiplayer_proxy(handler, path, method, query, body=None):
+    peer = config.get("peer_target", "")
+    if not peer:
+        return False
+        
+    url = f"http://{peer}/{path}"
+    if query:
+        q_str = urllib.parse.urlencode(query, doseq=True)
+        url += f"?{q_str}"
+        
+    log_message(f"Proxying multiplayer request to peer: {method} {url}", "cyan")
+    
+    try:
+        req = urllib.request.Request(url, method=method)
+        if body:
+            req.data = body
+            req.add_header("Content-Type", "application/json")
+            
+        with urllib.request.urlopen(req, timeout=15) as res:
+            res_body = res.read()
+            
+            # If gameover succeeded, update our local stats
+            if path == 'multiplayer/game/gameover' and res.status == 200:
+                try:
+                    res_data = json.loads(res_body.decode('utf-8'))
+                    if res_data.get("status") == "ok":
+                        my_result = res_data.get("myResult", 0)
+                        user = query.get("user", [""])[0] or (json.loads(body.decode('utf-8')).get("user", "") if body else "")
+                        update_player_stats(user, my_result == 1)
+                except Exception as ex:
+                    log_message(f"Error updating local stats after proxy gameover: {ex}", "red")
+            
+            handler.send_response(res.status)
+            for k, v in res.getheaders():
+                if k.lower() not in ("content-length", "transfer-encoding", "connection"):
+                    handler.send_header(k, v)
+            handler.send_header("Content-Length", str(len(res_body)))
+            handler.end_headers()
+            handler.wfile.write(res_body)
+            return True
+    except Exception as e:
+        log_message(f"Failed to proxy to peer: {e}", "red")
+        handler.send_json_response(502, {"status": "error", "reason": f"Peer server offline: {e}"})
+        return True
+
+def handle_multiplayer_match(handler, query):
+    global match_queue
+    user = query.get("user", [""])[0]
+    rating = int(query.get("rating", [1000])[0])
+    
+    with mp_lock:
+        # Check if user is already waiting
+        for entry in match_queue:
+            if entry["user"] == user:
+                condition = entry["condition"]
+                break
+        else:
+            if len(match_queue) > 0:
+                peer_entry = match_queue.pop(0)
+                room_id = f"room_{int(time.time()*1000)}_{random.randint(100, 999)}"
+                
+                peer_entry["result"] = {"roomId": room_id, "role": 1}
+                peer_entry["condition"].notify_all()
+                
+                handler.send_json_response(200, {"roomId": room_id, "role": 2})
+                log_message(f"Matchmaker: Paired {peer_entry['user']} (P1) and {user} (P2) in room {room_id}", "green")
+                return
+            else:
+                condition = threading.Condition(mp_lock)
+                entry = {
+                    "user": user,
+                    "rating": rating,
+                    "condition": condition,
+                    "result": None
+                }
+                match_queue.append(entry)
+                
+        success = condition.wait(timeout=25.0)
+        if not success or entry["result"] is None:
+            if entry in match_queue:
+                match_queue.remove(entry)
+            handler.send_json_response(200, {"roomId": "", "role": 0, "status": "timeout"})
+            log_message(f"Matchmaker: Timeout waiting for opponent for {user}", "yellow")
+        else:
+            handler.send_json_response(200, entry["result"])
+
+def handle_game_start_info(handler, body_json):
+    global active_rooms
+    room_id = body_json.get("roomId")
+    user = body_json.get("user")
+    rating = body_json.get("rating", 1000)
+    armory = body_json.get("armory", [])
+    
+    with mp_lock:
+        if room_id not in active_rooms:
+            active_rooms[room_id] = {
+                "players": [],
+                "start_condition": threading.Condition(mp_lock),
+                "go_condition": threading.Condition(mp_lock),
+                "level_index": None,
+                "readies": set(),
+                "logins": set(),
+                "ticks": {},
+                "tick_conditions": {},
+                "gameover": {},
+                "gameover_condition": threading.Condition(mp_lock),
+                "aborted": False
+            }
+        room = active_rooms[room_id]
+        
+        player_exists = False
+        for p in room["players"]:
+            if p["user"] == user:
+                player_exists = True
+                p["rating"] = rating
+                p["armory"] = armory
+                break
+        if not player_exists:
+            room["players"].append({
+                "user": user,
+                "rating": rating,
+                "armory": armory
+            })
+            
+        if len(room["players"]) == 2:
+            room["start_condition"].notify_all()
+        else:
+            room["start_condition"].wait(timeout=25.0)
+            
+        if len(room["players"]) < 2:
+            handler.send_json_response(200, {"status": "aborted", "reason": "timeout_waiting_for_peer"})
+            return
+            
+        players = room["players"]
+        role = 1 if user == players[0]["user"] else 2
+        
+        response_data = {
+            "role": role,
+            "player1": {
+                "name": players[0]["user"],
+                "rating": players[0]["rating"],
+                "armory": players[0]["armory"]
+            },
+            "player2": {
+                "name": players[1]["user"],
+                "rating": players[1]["rating"],
+                "armory": players[1]["armory"]
+            }
+        }
+        handler.send_json_response(200, response_data)
+
+def handle_game_ready(handler, query):
+    room_id = query.get("roomId", [""])[0]
+    user = query.get("user", [""])[0]
+    
+    with mp_lock:
+        room = active_rooms.get(room_id)
+        if room:
+            room["readies"].add(user)
+            
+    handler.send_json_response(200, {"status": "ok"})
+
+def handle_game_go(handler, query):
+    room_id = query.get("roomId", [""])[0]
+    user = query.get("user", [""])[0]
+    
+    with mp_lock:
+        room = active_rooms.get(room_id)
+        if not room:
+            handler.send_json_response(400, {"status": "error", "reason": "Room not found"})
+            return
+            
+        room["logins"].add(user)
+        if len(room["logins"]) == 2:
+            room["level_index"] = random.randint(0, 4)
+            room["go_condition"].notify_all()
+        else:
+            room["go_condition"].wait(timeout=25.0)
+            
+        if room["level_index"] is None:
+            handler.send_json_response(200, {"status": "error", "reason": "timeout"})
+        else:
+            handler.send_json_response(200, {"status": "ok", "levelIndex": room["level_index"]})
+
+def handle_game_checkin(handler, body_json):
+    room_id = body_json.get("roomId")
+    user = body_json.get("user")
+    move0 = body_json.get("move0", 0)
+    move1 = body_json.get("move1", 0)
+    move2 = body_json.get("move2", 0)
+    hash_val = body_json.get("hash", 0)
+    
+    with mp_lock:
+        room = active_rooms.get(room_id)
+        if not room or room.get("aborted", False):
+            handler.send_json_response(200, {"status": "aborted", "reason": "room_closed"})
+            return
+            
+        p_idx = -1
+        for idx, p in enumerate(room["players"]):
+            if p["user"] == user:
+                p_idx = idx
+                break
+                
+        if p_idx == -1:
+            handler.send_json_response(200, {"status": "aborted", "reason": "not_in_room"})
+            return
+            
+        if "player_moves" not in room:
+            room["player_moves"] = [[], []]
+            
+        my_moves = room["player_moves"][p_idx]
+        my_moves.append([move0, move1, move2, hash_val])
+        t = len(my_moves) - 1
+        
+        peer_idx = 1 - p_idx
+        peer_moves = room["player_moves"][peer_idx]
+        
+        if t not in room["tick_conditions"]:
+            room["tick_conditions"][t] = threading.Condition(mp_lock)
+            
+        if len(peer_moves) > t:
+            room["tick_conditions"][t].notify_all()
+        else:
+            success = room["tick_conditions"][t].wait(timeout=15.0)
+            if not success or len(peer_moves) <= t or room.get("aborted", False):
+                room["aborted"] = True
+                handler.send_json_response(200, {"status": "aborted", "reason": "peer_timeout"})
+                return
+                
+        p1_move = room["player_moves"][0][t]
+        p2_move = room["player_moves"][1][t]
+        
+        response_data = {
+            "status": "ok",
+            "clock": t + 1,
+            "moves": [p1_move[0], p1_move[1], p1_move[2], p2_move[0], p2_move[1], p2_move[2]]
+        }
+        handler.send_json_response(200, response_data)
+
+def handle_game_gameover(handler, body_json):
+    room_id = body_json.get("roomId")
+    user = body_json.get("user")
+    results = body_json.get("results", [0, 0])
+    
+    with mp_lock:
+        room = active_rooms.get(room_id)
+        if not room:
+            handler.send_json_response(400, {"status": "error", "reason": "Room not found"})
+            return
+            
+        room["gameover"][user] = results
+        
+        if len(room["gameover"]) == 2:
+            room["gameover_condition"].notify_all()
+        else:
+            room["gameover_condition"].wait(timeout=10.0)
+            
+        p_idx = -1
+        for idx, p in enumerate(room["players"]):
+            if p["user"] == user:
+                p_idx = idx
+                break
+                
+        p1_alive = results[0]
+        p2_alive = results[1]
+        
+        my_alive = p1_alive if p_idx == 0 else p2_alive
+        won = (my_alive == 1)
+        
+        update_player_stats(user, won)
+        
+        if user == room["players"][-1]["user"]:
+            def cleanup():
+                time.sleep(5)
+                with mp_lock:
+                    if room_id in active_rooms:
+                        del active_rooms[room_id]
+            threading.Thread(target=cleanup).start()
+            
+        handler.send_json_response(200, {"status": "ok", "myResult": 1 if won else 0})
 
 if __name__ == "__main__":
     main()
